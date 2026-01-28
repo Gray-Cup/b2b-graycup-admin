@@ -31,9 +31,9 @@ export async function GET() {
     return NextResponse.json({ counts })
   } catch (error) {
     console.error('Error fetching counts:', error)
-    return NextResponse.json(
-      { error: 'Failed to fetch counts' },
-      { status: 500 }
-    )
+    // Return empty counts instead of error to prevent UI crash
+    return NextResponse.json({
+      counts: tables.map(({ table, label, href }) => ({ table, label, href, count: 0 }))
+    })
   }
 }

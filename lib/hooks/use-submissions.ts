@@ -14,15 +14,18 @@ interface TableCount {
   count: number
 }
 
+// Cache for 1 year (in milliseconds)
+const ONE_YEAR_MS = 365 * 24 * 60 * 60 * 1000
+
 export function useSubmissions({ table, resolved }: UseSubmissionsOptions) {
   const resolvedParam = resolved ? `&resolved=${resolved}` : ''
   const key = `/api/submissions?table=${table}${resolvedParam}`
 
   const { data, error, isLoading, isValidating } = useSWR(key, fetcher, {
-    revalidateOnFocus: true,
-    revalidateOnReconnect: true,
-    dedupingInterval: 5000, // Dedupe requests within 5s
-    focusThrottleInterval: 10000, // Throttle revalidation on focus
+    revalidateOnFocus: false,
+    revalidateOnReconnect: false,
+    revalidateIfStale: false,
+    dedupingInterval: ONE_YEAR_MS,
   })
 
   return {
@@ -39,9 +42,10 @@ export function useDashboardCounts() {
     '/api/dashboard/counts',
     fetcher,
     {
-      revalidateOnFocus: true,
-      refreshInterval: 30000, // Refresh every 30s
-      dedupingInterval: 5000,
+      revalidateOnFocus: false,
+      revalidateOnReconnect: false,
+      revalidateIfStale: false,
+      dedupingInterval: ONE_YEAR_MS,
     }
   )
 
@@ -52,6 +56,17 @@ export function useDashboardCounts() {
   }
 }
 
+// Revalidate all related caches after mutation
+async function revalidateAllCaches(table: string) {
+  // Revalidate all filter variants for this table
+  await Promise.all([
+    mutate(`/api/submissions?table=${table}`),
+    mutate(`/api/submissions?table=${table}&resolved=true`),
+    mutate(`/api/submissions?table=${table}&resolved=false`),
+    mutate('/api/dashboard/counts'),
+  ])
+}
+
 // Optimistic update helper
 export async function updateSubmission(
   table: string,
@@ -59,11 +74,10 @@ export async function updateSubmission(
   resolved: boolean,
   currentFilter: string | null
 ) {
-  // Construct the cache key
   const resolvedParam = currentFilter ? `&resolved=${currentFilter}` : ''
   const key = `/api/submissions?table=${table}${resolvedParam}`
 
-  // Optimistically update the cache
+  // Optimistically update the current view
   await mutate(
     key,
     async (currentData: { data: Record<string, unknown>[] } | undefined) => {
@@ -74,7 +88,6 @@ export async function updateSubmission(
         body: JSON.stringify({ table, id, resolved }),
       })
 
-      // Return updated data
       if (!currentData?.data) return currentData
 
       return {
@@ -84,11 +97,11 @@ export async function updateSubmission(
         ),
       }
     },
-    { revalidate: true }
+    { revalidate: false }
   )
 
-  // Also revalidate dashboard counts
-  mutate('/api/dashboard/counts')
+  // Revalidate all related caches
+  await revalidateAllCaches(table)
 }
 
 export async function deleteSubmission(
@@ -113,8 +126,9 @@ export async function deleteSubmission(
         data: currentData.data.filter(item => item.id !== id),
       }
     },
-    { revalidate: false } // Don't revalidate, we already updated optimistically
+    { revalidate: false }
   )
 
-  mutate('/api/dashboard/counts')
+  // Revalidate all related caches
+  await revalidateAllCaches(table)
 }

@@ -100,7 +100,7 @@ export function DataTable({ tableName, columns, title }: DataTableProps) {
           <Text className="text-ui-fg-subtle">No {title.toLowerCase()} found</Text>
         </div>
       ) : (
-        <div className="bg-ui-bg-base rounded-lg border border-ui-border-base overflow-hidden">
+        <div className="bg-ui-bg-base rounded-lg border border-ui-border-base overflow-x-auto">
           <Table>
             <Table.Header>
               <Table.Row>

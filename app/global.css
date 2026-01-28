@@ -1,16 +1,14 @@
 @import "tailwindcss";
 @source "../node_modules/@medusajs/ui";
-@config "@medusajs/ui-preset";
+@config "../tailwind.config.js";
 
 
 html {
   min-width: 360px;
-  color-scheme: light only;
 }
 
-/* Force light mode for Medusa UI */
 :root {
-  color-scheme: light only;
+  color-scheme: light dark;
 }
 
 /* Remove Safari input shadow on mobile */
@@ -20,4 +18,10 @@ input[type='password'] {
   -webkit-appearance: none;
   -moz-appearance: none;
   appearance: none;
+}
+
+/* Ensure buttons have pointer cursor */
+button,
+[role="button"] {
+  cursor: pointer;
 }

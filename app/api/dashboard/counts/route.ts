@@ -28,7 +28,14 @@ export async function GET() {
       })
     )
 
-    return NextResponse.json({ counts })
+    return NextResponse.json(
+      { counts },
+      {
+        headers: {
+          'Cache-Control': 'private, max-age=31536000, stale-while-revalidate=31536000',
+        },
+      }
+    )
   } catch (error) {
     console.error('Error fetching counts:', error)
     // Return empty counts instead of error to prevent UI crash

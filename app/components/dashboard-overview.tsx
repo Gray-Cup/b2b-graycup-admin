@@ -28,9 +28,9 @@ export function DashboardOverview() {
       </div>
 
       {/* Summary Card */}
-      <div className="mb-8 p-6 bg-ui-bg-base rounded-lg border border-ui-border-base shadow-elevation-card-rest">
-        <Text className="text-sm text-ui-fg-subtle mb-1">Total Unresolved</Text>
-        <Text className="text-3xl font-semibold text-ui-fg-base">
+      <div className="mb-6 p-4 bg-ui-bg-base rounded-lg border border-ui-border-base shadow-elevation-card-rest">
+        <Text className="text-xs text-ui-fg-subtle mb-0.5">Total Unresolved</Text>
+        <Text className="text-2xl font-semibold text-ui-fg-base">
           {isLoading ? '...' : totalUnresolved}
         </Text>
       </div>
@@ -45,14 +45,14 @@ export function DashboardOverview() {
             <Link
               key={config.table}
               href={config.href}
-              className="block p-6 bg-ui-bg-base rounded-lg border border-ui-border-base shadow-elevation-card-rest hover:shadow-elevation-card-hover transition-shadow"
+              className="block p-4 bg-ui-bg-base rounded-lg border border-ui-border-base shadow-elevation-card-rest hover:shadow-elevation-card-hover transition-shadow"
             >
-              <Text className="text-sm text-ui-fg-subtle mb-1">{config.label}</Text>
-              <div className="flex items-baseline gap-2">
-                <Text className="text-2xl font-semibold text-ui-fg-base">
+              <Text className="text-xs text-ui-fg-subtle mb-0.5">{config.label}</Text>
+              <div className="flex items-baseline gap-1.5">
+                <Text className="text-xl font-semibold text-ui-fg-base">
                   {isLoading ? '...' : count}
                 </Text>
-                <Text className="text-sm text-ui-fg-muted">unresolved</Text>
+                <Text className="text-xs text-ui-fg-muted">unresolved</Text>
               </div>
             </Link>
           )

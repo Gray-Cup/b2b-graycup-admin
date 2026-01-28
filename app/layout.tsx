@@ -6,6 +6,7 @@ import { GeistMono } from 'geist/font/mono'
 import { Analytics } from '@vercel/analytics/react'
 import { SpeedInsights } from '@vercel/speed-insights/next'
 import { Toaster } from '@medusajs/ui'
+import { ThemeToggle } from './components/theme-toggle'
 
 export const metadata: Metadata = {
   title: {
@@ -31,6 +32,7 @@ export default function RootLayout({
       lang="en"
       data-mode="light"
       style={{ colorScheme: 'light' }}
+      suppressHydrationWarning
       className={cx(
         'light',
         GeistSans.variable,
@@ -39,6 +41,7 @@ export default function RootLayout({
     >
       <body className="antialiased bg-ui-bg-subtle">
         {children}
+        <ThemeToggle />
         <Toaster />
         <Analytics />
         <SpeedInsights />

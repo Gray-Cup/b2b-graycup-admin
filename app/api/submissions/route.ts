@@ -39,7 +39,14 @@ export async function GET(request: NextRequest) {
       return NextResponse.json({ error: error.message }, { status: 500 })
     }
 
-    return NextResponse.json({ data })
+    return NextResponse.json(
+      { data },
+      {
+        headers: {
+          'Cache-Control': 'private, max-age=31536000, stale-while-revalidate=31536000',
+        },
+      }
+    )
   } catch (error) {
     console.error('Error:', error)
     return NextResponse.json({ error: 'Failed to fetch data' }, { status: 500 })

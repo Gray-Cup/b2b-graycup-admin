@@ -53,22 +53,22 @@ export default function LoginPage() {
   }
 
   return (
-    <div className="min-h-screen flex items-center justify-center bg-neutral-50">
-      <div className="w-full max-w-sm p-8">
-        <div className="mb-10 text-center">
-          <h1 className="text-2xl font-medium text-neutral-900">GrayCup Admin</h1>
-          <p className="mt-2 text-sm text-neutral-500">Sign in to your account</p>
+    <div className="min-h-screen flex items-center justify-center bg-neutral-100">
+      <div className="w-full max-w-xs p-6 bg-white border border-neutral-200 rounded-lg">
+        <div className="mb-6">
+          <h1 className="text-lg font-medium text-neutral-900">GrayCup Admin</h1>
+          <p className="mt-1 text-sm text-neutral-500">Sign in to your account</p>
         </div>
 
-        <form onSubmit={handleSubmit} className="space-y-5">
+        <form onSubmit={handleSubmit} className="space-y-4">
           {error && (
-            <div className="p-3 text-sm text-red-600 bg-red-50 rounded">
+            <div className="p-2 text-sm text-red-600 bg-red-50 rounded">
               {error}
             </div>
           )}
 
           <div>
-            <label htmlFor="username" className="block text-sm text-neutral-600 mb-1.5">
+            <label htmlFor="username" className="block text-sm text-neutral-600 mb-1">
               Username
             </label>
             <input
@@ -76,14 +76,14 @@ export default function LoginPage() {
               type="text"
               value={username}
               onChange={(e) => setUsername(e.target.value)}
-              placeholder="Enter your username"
+              placeholder="Username"
               required
-              className="w-full px-0 py-2 text-neutral-900 placeholder-neutral-400 bg-transparent border-0 border-b border-neutral-200 focus:border-neutral-900 focus:outline-none focus:ring-0 transition-colors"
+              className="w-full px-3 py-2 text-sm text-neutral-900 placeholder-neutral-400 bg-neutral-50 border border-neutral-200 rounded focus:border-neutral-400 focus:outline-none transition-colors"
             />
           </div>
 
           <div>
-            <label htmlFor="password" className="block text-sm text-neutral-600 mb-1.5">
+            <label htmlFor="password" className="block text-sm text-neutral-600 mb-1">
               Password
             </label>
             <input
@@ -91,25 +91,23 @@ export default function LoginPage() {
               type="password"
               value={password}
               onChange={(e) => setPassword(e.target.value)}
-              placeholder="Enter your password"
+              placeholder="Password"
               required
-              className="w-full px-0 py-2 text-neutral-900 placeholder-neutral-400 bg-transparent border-0 border-b border-neutral-200 focus:border-neutral-900 focus:outline-none focus:ring-0 transition-colors"
+              className="w-full px-3 py-2 text-sm text-neutral-900 placeholder-neutral-400 bg-neutral-50 border border-neutral-200 rounded focus:border-neutral-400 focus:outline-none transition-colors"
             />
           </div>
 
-          <div className="pt-2">
-            <Turnstile
-              ref={turnstileRef}
-              siteKey={process.env.NEXT_PUBLIC_TURNSTILE_SITE_KEY!}
-              onSuccess={setTurnstileToken}
-              onError={() => setTurnstileToken(null)}
-              onExpire={() => setTurnstileToken(null)}
-            />
-          </div>
+          <Turnstile
+            ref={turnstileRef}
+            siteKey={process.env.NEXT_PUBLIC_TURNSTILE_SITE_KEY!}
+            onSuccess={setTurnstileToken}
+            onError={() => setTurnstileToken(null)}
+            onExpire={() => setTurnstileToken(null)}
+          />
 
           <Button
             type="submit"
-            className="w-full mt-4"
+            className="w-full"
             isLoading={loading}
           >
             Sign in

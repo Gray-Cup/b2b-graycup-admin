@@ -19,7 +19,7 @@ export function DashboardOverview() {
   const totalUnresolved = (counts ?? []).reduce((sum, item) => sum + (item.count ?? 0), 0)
 
   return (
-    <div>
+    <div className="max-w-5xl mx-auto">
       <div className="mb-8">
         <Heading level="h1" className="mb-2">Dashboard</Heading>
         <Text className="text-ui-fg-subtle">
@@ -28,7 +28,7 @@ export function DashboardOverview() {
       </div>
 
       {/* Summary Card */}
-      <div className="mb-6 p-4 bg-ui-bg-base rounded-lg border border-ui-border-base shadow-elevation-card-rest">
+      <div className="mb-6 p-4 bg-ui-bg-base rounded-lg border border-ui-border-base ">
         <Text className="text-xs text-ui-fg-subtle mb-0.5">Total Unresolved</Text>
         <Text className="text-2xl font-semibold text-ui-fg-base">
           {isLoading ? '...' : totalUnresolved}
@@ -45,7 +45,7 @@ export function DashboardOverview() {
             <Link
               key={config.table}
               href={config.href}
-              className="block p-4 bg-ui-bg-base rounded-lg border border-ui-border-base shadow-elevation-card-rest hover:shadow-elevation-card-hover transition-shadow"
+              className="block p-4 bg-ui-bg-base rounded-lg border border-ui-border-base transition-shadow"
             >
               <Text className="text-xs text-ui-fg-subtle mb-0.5">{config.label}</Text>
               <div className="flex items-baseline gap-1.5">

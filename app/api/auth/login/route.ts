@@ -1,13 +1,44 @@
 import { NextResponse } from 'next/server'
 import { createToken, validateCredentials } from '@/lib/auth'
 
+async function verifyTurnstileToken(token: string): Promise<boolean> {
+  const response = await fetch(
+    'https://challenges.cloudflare.com/turnstile/v0/siteverify',
+    {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+      body: new URLSearchParams({
+        secret: process.env.TURNSTILE_SECRET_KEY!,
+        response: token,
+      }),
+    }
+  )
+  const data = await response.json()
+  return data.success === true
+}
+
 export async function POST(request: Request) {
   try {
-    const { username, password } = await request.json()
+    const { username, password, turnstileToken } = await request.json()
 
     if (!username || !password) {
       return NextResponse.json(
         { error: 'Username and password are required' },
+        { status: 400 }
+      )
+    }
+
+    if (!turnstileToken) {
+      return NextResponse.json(
+        { error: 'Security verification required' },
+        { status: 400 }
+      )
+    }
+
+    const isTurnstileValid = await verifyTurnstileToken(turnstileToken)
+    if (!isTurnstileValid) {
+      return NextResponse.json(
+        { error: 'Security verification failed' },
         { status: 400 }
       )
     }

@@ -1,0 +1,23 @@
+@import "tailwindcss";
+@source "../node_modules/@medusajs/ui";
+@config "@medusajs/ui-preset";
+
+
+html {
+  min-width: 360px;
+  color-scheme: light only;
+}
+
+/* Force light mode for Medusa UI */
+:root {
+  color-scheme: light only;
+}
+
+/* Remove Safari input shadow on mobile */
+input[type='text'],
+input[type='email'],
+input[type='password'] {
+  -webkit-appearance: none;
+  -moz-appearance: none;
+  appearance: none;
+}

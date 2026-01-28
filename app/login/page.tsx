@@ -54,7 +54,7 @@ export default function LoginPage() {
 
   return (
     <div className="min-h-screen flex items-center justify-center bg-neutral-100">
-      <div className="w-full max-w-xs p-6 bg-white border border-neutral-200 rounded-lg">
+      <div className="w-full max-w-sm p-8 bg-white border border-neutral-200 rounded-lg">
         <div className="mb-6">
           <h1 className="text-lg font-medium text-neutral-900">GrayCup Admin</h1>
           <p className="mt-1 text-sm text-neutral-500">Sign in to your account</p>

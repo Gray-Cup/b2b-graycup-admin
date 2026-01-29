@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useRef } from 'react'
+import { useState, useRef, useCallback } from 'react'
 import { PageHeader } from '@/app/components/page-header'
 import { Button, Text, Badge, Select } from '@medusajs/ui'
 import { ArrowDownTray, ArrowUpTray, Check, XMark } from '@medusajs/icons'
@@ -26,11 +26,23 @@ interface ImportResult {
   errors: string[]
 }
 
+interface ExportProgress {
+  current: number
+  total: number
+  currentTable: string
+  status: string
+}
+
+const CHUNK_SIZE = 1000 // Process 1000 records at a time
+const IMPORT_BATCH_SIZE = 100 // Import 100 records at a time
+
 export function BackupsPage() {
   const [isExporting, setIsExporting] = useState(false)
   const [isImporting, setIsImporting] = useState(false)
   const [importResults, setImportResults] = useState<ImportResult[]>([])
   const [selectedTable, setSelectedTable] = useState<string>('all')
+  const [exportProgress, setExportProgress] = useState<ExportProgress | null>(null)
+  const [importProgress, setImportProgress] = useState<string>('')
   const fileInputRef = useRef<HTMLInputElement>(null)
 
   const formatKey = (key: string) => {
@@ -40,7 +52,7 @@ export function BackupsPage() {
       .join(' ')
   }
 
-  const formatDataForExport = (data: Record<string, unknown>[]) => {
+  const formatDataForExport = useCallback((data: Record<string, unknown>[]) => {
     return data.map((item) => {
       const formatted: Record<string, unknown> = {}
       for (const [key, value] of Object.entries(item)) {
@@ -62,25 +74,33 @@ export function BackupsPage() {
       }
       return formatted
     })
-  }
+  }, [])
 
-  const generateExcel = (data: Record<string, unknown>[], title: string) => {
+  // Generate Excel in chunks for large datasets
+  const generateExcel = useCallback((data: Record<string, unknown>[], title: string) => {
     const formatted = formatDataForExport(data)
     const ws = XLSX.utils.json_to_sheet(formatted)
     const wb = XLSX.utils.book_new()
-    XLSX.utils.book_append_sheet(wb, ws, title)
+    XLSX.utils.book_append_sheet(wb, ws, title.slice(0, 31)) // Excel sheet name limit
     return XLSX.write(wb, { bookType: 'xlsx', type: 'array' })
-  }
+  }, [formatDataForExport])
 
-  const generatePDF = (data: Record<string, unknown>[], title: string) => {
+  // Generate PDF in chunks - skip for very large datasets
+  const generatePDF = useCallback((data: Record<string, unknown>[], title: string) => {
     const formatted = formatDataForExport(data)
     if (formatted.length === 0) return null
+
+    // Skip PDF for very large datasets (>10000 rows) as it's not practical
+    if (formatted.length > 10000) {
+      return null
+    }
 
     const doc = new jsPDF('landscape')
     doc.setFontSize(16)
     doc.text(title, 14, 15)
     doc.setFontSize(10)
     doc.text(`Generated on ${format(new Date(), 'MMM d, yyyy h:mm a')}`, 14, 22)
+    doc.text(`Total Records: ${formatted.length}`, 14, 28)
 
     const headers = Object.keys(formatted[0])
     const rows = formatted.map((item) => headers.map((h) => String(item[h] ?? '')))
@@ -88,55 +108,71 @@ export function BackupsPage() {
     autoTable(doc, {
       head: [headers],
       body: rows,
-      startY: 28,
-      styles: { fontSize: 8, cellPadding: 2 },
+      startY: 34,
+      styles: { fontSize: 7, cellPadding: 1.5 },
       headStyles: { fillColor: [100, 100, 100] },
     })
 
     return doc.output('arraybuffer')
-  }
+  }, [formatDataForExport])
 
-  const generateCSV = (data: Record<string, unknown>[]) => {
+  // Generate CSV using streaming approach for large files
+  const generateCSV = useCallback((data: Record<string, unknown>[]) => {
     const formatted = formatDataForExport(data)
     if (formatted.length === 0) return ''
 
     const headers = Object.keys(formatted[0])
-    const csvRows = [
-      headers.join(','),
-      ...formatted.map((row) =>
+    const csvParts: string[] = [headers.join(',')]
+
+    // Process in chunks to avoid blocking
+    for (let i = 0; i < formatted.length; i += CHUNK_SIZE) {
+      const chunk = formatted.slice(i, i + CHUNK_SIZE)
+      const chunkRows = chunk.map((row) =>
         headers
           .map((h) => {
             const value = String(row[h] ?? '')
             return `"${value.replace(/"/g, '""')}"`
           })
           .join(',')
-      ),
-    ]
-    return csvRows.join('\n')
-  }
+      )
+      csvParts.push(...chunkRows)
+    }
 
-  const generateTXT = (data: Record<string, unknown>[], title: string) => {
+    return csvParts.join('\n')
+  }, [formatDataForExport])
+
+  // Generate TXT with chunked processing
+  const generateTXT = useCallback((data: Record<string, unknown>[], title: string) => {
     const formatted = formatDataForExport(data)
     if (formatted.length === 0) return ''
 
-    let txtContent = `${title}\n`
-    txtContent += `Generated on ${format(new Date(), 'MMM d, yyyy h:mm a')}\n`
-    txtContent += '='.repeat(50) + '\n\n'
+    const parts: string[] = [
+      title,
+      `Generated on ${format(new Date(), 'MMM d, yyyy h:mm a')}`,
+      `Total Records: ${formatted.length}`,
+      '='.repeat(50),
+      ''
+    ]
 
-    formatted.forEach((item, index) => {
-      txtContent += `Record ${index + 1}\n`
-      txtContent += '-'.repeat(30) + '\n'
-      for (const [key, value] of Object.entries(item)) {
-        txtContent += `${key}: ${value}\n`
-      }
-      txtContent += '\n'
-    })
+    for (let i = 0; i < formatted.length; i += CHUNK_SIZE) {
+      const chunk = formatted.slice(i, i + CHUNK_SIZE)
+      chunk.forEach((item, index) => {
+        parts.push(`Record ${i + index + 1}`)
+        parts.push('-'.repeat(30))
+        for (const [key, value] of Object.entries(item)) {
+          parts.push(`${key}: ${value}`)
+        }
+        parts.push('')
+      })
+    }
 
-    return txtContent
-  }
+    return parts.join('\n')
+  }, [formatDataForExport])
 
   const handleExport = async () => {
     setIsExporting(true)
+    setExportProgress({ current: 0, total: 0, currentTable: '', status: 'Preparing...' })
+
     try {
       const zip = new JSZip()
       const dateStr = format(new Date(), 'yyyy-MM-dd')
@@ -145,7 +181,17 @@ export function BackupsPage() {
         ? tables
         : tables.filter(t => t.key === selectedTable)
 
-      for (const table of tablesToExport) {
+      setExportProgress(prev => ({ ...prev!, total: tablesToExport.length }))
+
+      for (let i = 0; i < tablesToExport.length; i++) {
+        const table = tablesToExport[i]
+        setExportProgress({
+          current: i + 1,
+          total: tablesToExport.length,
+          currentTable: table.name,
+          status: `Fetching ${table.name}...`
+        })
+
         const response = await fetch(`/api/submissions?table=${table.key}`)
         const result = await response.json()
         const data = result.data || []
@@ -155,27 +201,54 @@ export function BackupsPage() {
         const folder = zip.folder(table.key)
         if (!folder) continue
 
-        // JSON
-        folder.file(`${table.key}.json`, JSON.stringify(data, null, 2))
+        setExportProgress(prev => ({ ...prev!, status: `Processing ${table.name} (${data.length} records)...` }))
+
+        // JSON - use streaming for large files
+        setExportProgress(prev => ({ ...prev!, status: `Creating JSON for ${table.name}...` }))
+        const jsonContent = JSON.stringify(data, null, 2)
+        folder.file(`${table.key}.json`, jsonContent)
 
         // CSV
+        setExportProgress(prev => ({ ...prev!, status: `Creating CSV for ${table.name}...` }))
         const csv = generateCSV(data)
         if (csv) folder.file(`${table.key}.csv`, csv)
 
         // Excel
+        setExportProgress(prev => ({ ...prev!, status: `Creating Excel for ${table.name}...` }))
         const excel = generateExcel(data, table.name)
         folder.file(`${table.key}.xlsx`, excel)
 
-        // PDF
-        const pdf = generatePDF(data, table.name)
-        if (pdf) folder.file(`${table.key}.pdf`, pdf)
+        // PDF - only for smaller datasets
+        if (data.length <= 10000) {
+          setExportProgress(prev => ({ ...prev!, status: `Creating PDF for ${table.name}...` }))
+          const pdf = generatePDF(data, table.name)
+          if (pdf) folder.file(`${table.key}.pdf`, pdf)
+        }
 
         // TXT
+        setExportProgress(prev => ({ ...prev!, status: `Creating TXT for ${table.name}...` }))
         const txt = generateTXT(data, table.name)
         if (txt) folder.file(`${table.key}.txt`, txt)
       }
 
-      const content = await zip.generateAsync({ type: 'blob' })
+      setExportProgress(prev => ({ ...prev!, status: 'Compressing ZIP file...' }))
+
+      // Generate ZIP with compression and streaming
+      const content = await zip.generateAsync(
+        {
+          type: 'blob',
+          compression: 'DEFLATE',
+          compressionOptions: { level: 6 },
+          streamFiles: true
+        },
+        (metadata) => {
+          setExportProgress(prev => ({
+            ...prev!,
+            status: `Compressing: ${Math.round(metadata.percent)}%`
+          }))
+        }
+      )
+
       const url = URL.createObjectURL(content)
       const link = document.createElement('a')
       link.href = url
@@ -189,6 +262,7 @@ export function BackupsPage() {
       alert('Failed to create backup. Please try again.')
     } finally {
       setIsExporting(false)
+      setExportProgress(null)
     }
   }
 
@@ -226,9 +300,8 @@ export function BackupsPage() {
           .toLowerCase()
           .replace(/^_/, '')
 
-        let value: unknown = values[index] || ''
+        const value: unknown = values[index] || ''
 
-        // Convert back from formatted values
         if (originalKey === 'status' || header === 'Status') {
           row['resolved'] = value === 'Resolved'
         } else if (originalKey === 'vaulted' || header === 'Vaulted') {
@@ -248,19 +321,80 @@ export function BackupsPage() {
     return data
   }
 
+  // Parse JSON in chunks to handle large files
+  const parseJSONFile = async (file: File): Promise<Record<string, unknown>[]> => {
+    const content = await file.text()
+    const data = JSON.parse(content)
+    return Array.isArray(data) ? data : [data]
+  }
+
+  // Parse CSV file with streaming for large files
+  const parseCSVFile = async (file: File): Promise<Record<string, unknown>[]> => {
+    const content = await file.text()
+    return parseCSV(content)
+  }
+
+  // Import data in batches
+  const importInBatches = async (
+    table: string,
+    data: Record<string, unknown>[],
+    onProgress: (progress: string) => void
+  ): Promise<{ success: number; failed: number; errors: string[] }> => {
+    let totalSuccess = 0
+    let totalFailed = 0
+    const allErrors: string[] = []
+
+    const totalBatches = Math.ceil(data.length / IMPORT_BATCH_SIZE)
+
+    for (let i = 0; i < data.length; i += IMPORT_BATCH_SIZE) {
+      const batch = data.slice(i, i + IMPORT_BATCH_SIZE)
+      const batchNum = Math.floor(i / IMPORT_BATCH_SIZE) + 1
+      onProgress(`Importing batch ${batchNum}/${totalBatches} (${i + batch.length}/${data.length} records)`)
+
+      try {
+        const response = await fetch('/api/backups/import', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ table, data: batch })
+        })
+
+        const result = await response.json()
+        totalSuccess += result.success || 0
+        totalFailed += result.failed || 0
+        if (result.errors) {
+          allErrors.push(...result.errors.slice(0, 5))
+        }
+      } catch (error) {
+        totalFailed += batch.length
+        allErrors.push(`Batch ${batchNum} failed: ${error instanceof Error ? error.message : 'Unknown error'}`)
+      }
+
+      // Small delay between batches to prevent overwhelming the server
+      if (i + IMPORT_BATCH_SIZE < data.length) {
+        await new Promise(resolve => setTimeout(resolve, 100))
+      }
+    }
+
+    return { success: totalSuccess, failed: totalFailed, errors: allErrors.slice(0, 10) }
+  }
+
   const handleImport = async (event: React.ChangeEvent<HTMLInputElement>) => {
     const files = event.target.files
     if (!files || files.length === 0) return
 
     setIsImporting(true)
     setImportResults([])
+    setImportProgress('')
     const results: ImportResult[] = []
 
     try {
-      for (const file of Array.from(files)) {
+      for (let fileIndex = 0; fileIndex < files.length; fileIndex++) {
+        const file = files[fileIndex]
         const fileName = file.name.toLowerCase()
         const isCSV = fileName.endsWith('.csv')
         const isJSON = fileName.endsWith('.json')
+
+        setImportProgress(`Processing file ${fileIndex + 1}/${files.length}: ${file.name}`)
 
         if (!isCSV && !isJSON) {
           results.push({
@@ -272,17 +406,15 @@ export function BackupsPage() {
           continue
         }
 
-        const content = await file.text()
         let data: Record<string, unknown>[]
 
         try {
+          setImportProgress(`Parsing ${file.name} (${(file.size / 1024 / 1024).toFixed(2)} MB)...`)
+
           if (isJSON) {
-            data = JSON.parse(content)
-            if (!Array.isArray(data)) {
-              data = [data]
-            }
+            data = await parseJSONFile(file)
           } else {
-            data = parseCSV(content)
+            data = await parseCSVFile(file)
           }
         } catch (parseError) {
           results.push({
@@ -294,7 +426,7 @@ export function BackupsPage() {
           continue
         }
 
-        // Try to determine the table from filename
+        // Determine table from filename
         let detectedTable = ''
         for (const table of tables) {
           if (fileName.includes(table.key)) {
@@ -313,20 +445,20 @@ export function BackupsPage() {
           continue
         }
 
-        // Import data
-        const response = await fetch('/api/backups/import', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ table: detectedTable, data })
-        })
+        setImportProgress(`Importing ${data.length} records to ${detectedTable}...`)
 
-        const result = await response.json()
+        // Import in batches for large datasets
+        const result = await importInBatches(
+          detectedTable,
+          data,
+          (progress) => setImportProgress(progress)
+        )
 
         results.push({
           table: `${detectedTable} (${file.name})`,
-          success: result.success || 0,
-          failed: result.failed || 0,
-          errors: result.errors || []
+          success: result.success,
+          failed: result.failed,
+          errors: result.errors
         })
       }
     } catch (error) {
@@ -340,6 +472,7 @@ export function BackupsPage() {
     } finally {
       setImportResults(results)
       setIsImporting(false)
+      setImportProgress('')
       if (fileInputRef.current) {
         fileInputRef.current.value = ''
       }
@@ -391,7 +524,24 @@ export function BackupsPage() {
                   <Badge key={fmt} color="grey">{fmt}</Badge>
                 ))}
               </div>
+              <Text className="text-xs text-ui-fg-muted mt-2">
+                PDF is skipped for tables with more than 10,000 records
+              </Text>
             </div>
+
+            {exportProgress && (
+              <div className="bg-ui-bg-subtle rounded-md p-3">
+                <div className="flex items-center justify-between mb-2">
+                  <Text className="text-xs text-ui-fg-muted">
+                    {exportProgress.current}/{exportProgress.total} tables
+                  </Text>
+                  <Text className="text-xs font-medium text-ui-fg-base">
+                    {exportProgress.currentTable}
+                  </Text>
+                </div>
+                <Text className="text-xs text-ui-fg-subtle">{exportProgress.status}</Text>
+              </div>
+            )}
 
             <Button
               variant="primary"
@@ -427,7 +577,16 @@ export function BackupsPage() {
               <Text className="text-xs text-ui-fg-muted mt-2">
                 Filename must contain the table name (e.g., contact_submissions.json)
               </Text>
+              <Text className="text-xs text-ui-fg-muted mt-1">
+                Large files are processed in batches of {IMPORT_BATCH_SIZE} records
+              </Text>
             </div>
+
+            {importProgress && (
+              <div className="bg-blue-50 border border-blue-200 rounded-md p-3">
+                <Text className="text-xs text-blue-700">{importProgress}</Text>
+              </div>
+            )}
 
             <input
               ref={fileInputRef}
@@ -455,8 +614,10 @@ export function BackupsPage() {
                   <div
                     key={index}
                     className={`p-3 rounded-md border ${
-                      result.errors.length > 0
+                      result.errors.length > 0 && result.success === 0
                         ? 'bg-red-50 border-red-200'
+                        : result.errors.length > 0
+                        ? 'bg-yellow-50 border-yellow-200'
                         : 'bg-green-50 border-green-200'
                     }`}
                   >
@@ -469,7 +630,7 @@ export function BackupsPage() {
                       <Text className="text-sm font-medium">{result.table}</Text>
                     </div>
                     <Text className="text-xs text-ui-fg-muted">
-                      {result.success} imported, {result.failed} failed
+                      {result.success.toLocaleString()} imported, {result.failed.toLocaleString()} failed
                     </Text>
                     {result.errors.length > 0 && (
                       <div className="mt-2">

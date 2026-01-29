@@ -10,6 +10,8 @@ const validTables = [
   'call_requests',
 ]
 
+const BATCH_INSERT_SIZE = 50 // Insert 50 records at a time to Supabase
+
 export async function POST(request: NextRequest) {
   try {
     const body = await request.json()
@@ -27,6 +29,9 @@ export async function POST(request: NextRequest) {
     let successCount = 0
     let failedCount = 0
     const errors: string[] = []
+
+    // Process and clean all items first
+    const cleanedItems: Record<string, unknown>[] = []
 
     for (const item of data) {
       try {
@@ -67,22 +72,49 @@ export async function POST(request: NextRequest) {
           processedItem.vaulted = false
         }
 
-        const { error } = await supabase
-          .from(table)
-          .insert(processedItem)
-
-        if (error) {
-          failedCount++
-          if (errors.length < 10) {
-            errors.push(`Row failed: ${error.message}`)
-          }
-        } else {
-          successCount++
-        }
+        cleanedItems.push(processedItem)
       } catch (itemError) {
         failedCount++
         if (errors.length < 10) {
           errors.push(`Row processing error: ${itemError instanceof Error ? itemError.message : 'Unknown error'}`)
+        }
+      }
+    }
+
+    // Batch insert for better performance with large datasets
+    for (let i = 0; i < cleanedItems.length; i += BATCH_INSERT_SIZE) {
+      const batch = cleanedItems.slice(i, i + BATCH_INSERT_SIZE)
+
+      try {
+        const { error, data: insertedData } = await supabase
+          .from(table)
+          .insert(batch)
+          .select('id')
+
+        if (error) {
+          // If batch insert fails, try individual inserts
+          for (const item of batch) {
+            const { error: singleError } = await supabase
+              .from(table)
+              .insert(item)
+
+            if (singleError) {
+              failedCount++
+              if (errors.length < 10) {
+                errors.push(`Row failed: ${singleError.message}`)
+              }
+            } else {
+              successCount++
+            }
+          }
+        } else {
+          successCount += insertedData?.length || batch.length
+        }
+      } catch (batchError) {
+        // If batch fails completely, count all as failed
+        failedCount += batch.length
+        if (errors.length < 10) {
+          errors.push(`Batch insert error: ${batchError instanceof Error ? batchError.message : 'Unknown error'}`)
         }
       }
     }

@@ -1,10 +1,10 @@
 'use client'
 
 import { useState, useMemo, useRef, useEffect } from 'react'
-import { Table, Button, Badge, Text, Input, Select, Checkbox, toast } from '@medusajs/ui'
-import { ArrowUpRightOnBox, CheckCircleSolid } from '@medusajs/icons'
+import { Table, Button, Badge, Text, Input, Checkbox, toast } from '@medusajs/ui'
+import { ArrowUpRightOnBox } from '@medusajs/icons'
 import { format } from 'date-fns'
-import { useSubmissions, updateSubmission, deleteSubmission, vaultSubmission } from '@/lib/hooks/use-submissions'
+import { useSubmissions, vaultSubmission, deleteSubmission } from '@/lib/hooks/use-submissions'
 import { ForwardButton } from '@/app/components/forward-button'
 import { useWebhooks, bulkForwardToDiscord } from '@/lib/hooks/use-webhooks'
 
@@ -14,22 +14,20 @@ interface Column {
   render?: (value: unknown, row: Record<string, unknown>) => React.ReactNode
 }
 
-interface DataTableProps {
+interface VaultDataTableProps {
   tableName: string
   columns: Column[]
   title: string
 }
 
-export function DataTable({ tableName, columns, title }: DataTableProps) {
-  const [filter, setFilter] = useState<'all' | 'resolved' | 'unresolved'>('unresolved')
+export function VaultDataTable({ tableName, columns, title }: VaultDataTableProps) {
   const [search, setSearch] = useState('')
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set())
   const [selectMode, setSelectMode] = useState(false)
 
-  const resolvedParam = filter === 'all' ? null : filter === 'resolved' ? 'true' : 'false'
   const { data, isLoading, isValidating } = useSubmissions({
     table: tableName,
-    resolved: resolvedParam,
+    vaulted: 'true',
   })
 
   const filteredData = useMemo(() => {
@@ -42,10 +40,9 @@ export function DataTable({ tableName, columns, title }: DataTableProps) {
     )
   }, [data, search])
 
-  // Clear selection when filter or search changes
   useEffect(() => {
     setSelectedIds(new Set())
-  }, [filter, search])
+  }, [search])
 
   const toggleSelect = (id: string) => {
     setSelectedIds(prev => {
@@ -83,21 +80,12 @@ export function DataTable({ tableName, columns, title }: DataTableProps) {
     return filteredData.filter((row: Record<string, unknown>) => selectedIds.has(row.id as string))
   }, [filteredData, selectedIds])
 
-  const toggleResolved = async (id: string, currentValue: boolean) => {
+  const handleUnvault = async (id: string) => {
     try {
-      await updateSubmission(tableName, id, !currentValue, resolvedParam)
-      toast.success(currentValue ? 'Marked as unresolved' : 'Marked as resolved')
+      await vaultSubmission(tableName, id, false, null)
+      toast.success('Removed from vault')
     } catch {
-      toast.error('Failed to update')
-    }
-  }
-
-  const toggleVaulted = async (id: string, currentValue: boolean) => {
-    try {
-      await vaultSubmission(tableName, id, !currentValue, resolvedParam)
-      toast.success(currentValue ? 'Removed from vault' : 'Added to vault')
-    } catch {
-      toast.error('Failed to update')
+      toast.error('Failed to remove from vault')
     }
   }
 
@@ -105,7 +93,7 @@ export function DataTable({ tableName, columns, title }: DataTableProps) {
     if (!confirm('Are you sure you want to delete this item?')) return
 
     try {
-      await deleteSubmission(tableName, id, resolvedParam)
+      await deleteSubmission(tableName, id, null)
       toast.success('Deleted successfully')
     } catch {
       toast.error('Failed to delete')
@@ -124,21 +112,10 @@ export function DataTable({ tableName, columns, title }: DataTableProps) {
     <div>
       <div className="mb-6 flex flex-col sm:flex-row gap-4 justify-between">
         <div className="flex gap-3 items-center">
-          <Select value={filter} onValueChange={(v) => setFilter(v as typeof filter)}>
-            <Select.Trigger>
-              <Select.Value placeholder="Filter" />
-            </Select.Trigger>
-            <Select.Content>
-              <Select.Item value="unresolved">Unresolved</Select.Item>
-              <Select.Item value="resolved">Resolved</Select.Item>
-              <Select.Item value="all">All</Select.Item>
-            </Select.Content>
-          </Select>
           {isValidating && !isLoading && (
             <Text className="text-xs text-ui-fg-muted">Updating...</Text>
           )}
 
-          {/* Select mode toggle and forward button */}
           <Button
             variant={selectMode ? 'primary' : 'secondary'}
             size="small"
@@ -169,7 +146,7 @@ export function DataTable({ tableName, columns, title }: DataTableProps) {
         </div>
       ) : filteredData.length === 0 ? (
         <div className="p-8 text-center bg-ui-bg-base rounded-lg border border-ui-border-base">
-          <Text className="text-ui-fg-subtle">No {title.toLowerCase()} found</Text>
+          <Text className="text-ui-fg-subtle">No vaulted {title.toLowerCase()}</Text>
         </div>
       ) : (
         <div className="bg-ui-bg-base rounded-lg border border-ui-border-base overflow-x-auto">
@@ -209,8 +186,8 @@ export function DataTable({ tableName, columns, title }: DataTableProps) {
                     </Table.Cell>
                   )}
                   <Table.Cell>
-                    <Badge color={row.resolved ? 'green' : 'orange'}>
-                      {row.resolved ? 'Resolved' : 'Pending'}
+                    <Badge color="purple">
+                      Vaulted
                     </Badge>
                   </Table.Cell>
                   {columns.map((col) => (
@@ -229,19 +206,11 @@ export function DataTable({ tableName, columns, title }: DataTableProps) {
                     <div className="flex gap-2">
                       <ForwardButton table={tableName} submission={row} />
                       <Button
-                        variant={row.vaulted ? 'primary' : 'secondary'}
-                        size="small"
-                        onClick={() => toggleVaulted(row.id as string, row.vaulted as boolean)}
-                        className={row.vaulted ? 'bg-purple-600 hover:bg-purple-700' : ''}
-                      >
-                        {row.vaulted ? <CheckCircleSolid className="w-4 h-4" /> : 'Vault'}
-                      </Button>
-                      <Button
                         variant="secondary"
                         size="small"
-                        onClick={() => toggleResolved(row.id as string, row.resolved as boolean)}
+                        onClick={() => handleUnvault(row.id as string)}
                       >
-                        {row.resolved ? 'Unresolve' : 'Resolve'}
+                        Unvault
                       </Button>
                       <Button
                         variant="danger"
@@ -268,7 +237,6 @@ export function DataTable({ tableName, columns, title }: DataTableProps) {
   )
 }
 
-// Forward Dropdown Component
 function ForwardDropdown({
   tableName,
   selectedSubmissions,

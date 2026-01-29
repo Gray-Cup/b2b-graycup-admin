@@ -14,6 +14,7 @@ export async function GET(request: NextRequest) {
   const searchParams = request.nextUrl.searchParams
   const table = searchParams.get('table')
   const resolved = searchParams.get('resolved')
+  const vaulted = searchParams.get('vaulted')
 
   if (!table || !validTables.includes(table)) {
     return NextResponse.json({ error: 'Invalid table' }, { status: 400 })
@@ -30,6 +31,12 @@ export async function GET(request: NextRequest) {
       query = query.eq('resolved', true)
     } else if (resolved === 'false') {
       query = query.eq('resolved', false)
+    }
+
+    if (vaulted === 'true') {
+      query = query.eq('vaulted', true)
+    } else if (vaulted === 'false') {
+      query = query.eq('vaulted', false)
     }
 
     const { data, error } = await query
@@ -55,7 +62,7 @@ export async function GET(request: NextRequest) {
 
 export async function PATCH(request: NextRequest) {
   const body = await request.json()
-  const { table, id, resolved } = body
+  const { table, id, resolved, vaulted } = body
 
   if (!table || !validTables.includes(table)) {
     return NextResponse.json({ error: 'Invalid table' }, { status: 400 })
@@ -67,9 +74,23 @@ export async function PATCH(request: NextRequest) {
 
   try {
     const supabase = getSupabase()
+
+    // Build update object dynamically
+    const updateData: Record<string, boolean> = {}
+    if (typeof resolved === 'boolean') {
+      updateData.resolved = resolved
+    }
+    if (typeof vaulted === 'boolean') {
+      updateData.vaulted = vaulted
+    }
+
+    if (Object.keys(updateData).length === 0) {
+      return NextResponse.json({ error: 'No valid fields to update' }, { status: 400 })
+    }
+
     const { error } = await supabase
       .from(table)
-      .update({ resolved })
+      .update(updateData)
       .eq('id', id)
 
     if (error) {

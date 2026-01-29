@@ -1,7 +1,7 @@
 'use client'
 
-import { DataTable } from '@/app/components/data-table'
 import { PageHeader } from '@/app/components/page-header'
+import { VaultDataTable } from '@/app/components/vault-data-table'
 import { DownloadButton } from '@/app/components/download-button'
 import { Badge } from '@medusajs/ui'
 
@@ -30,15 +30,15 @@ const columns = [
   },
 ]
 
-export function SampleRequestsTable() {
+export function VaultSampleRequestsTable() {
   return (
     <>
       <PageHeader
-        title="Sample Requests"
-        description="Free sample requests with payment"
-        action={<DownloadButton tableName="sample_requests" title="Sample Requests" />}
+        title="Vault - Sample Requests"
+        description="Important sample requests saved for reference"
+        action={<DownloadButton tableName="sample_requests" title="Vault - Sample Requests" isVault />}
       />
-      <DataTable
+      <VaultDataTable
         tableName="sample_requests"
         columns={columns}
         title="Sample Requests"

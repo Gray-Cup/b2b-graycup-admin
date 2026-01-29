@@ -1,7 +1,7 @@
 'use client'
 
-import { DataTable } from '@/app/components/data-table'
 import { PageHeader } from '@/app/components/page-header'
+import { VaultDataTable } from '@/app/components/vault-data-table'
 import { DownloadButton } from '@/app/components/download-button'
 
 const columns = [
@@ -14,15 +14,15 @@ const columns = [
   { key: 'quantity', label: 'Qty' },
 ]
 
-export function QuoteRequestsTable() {
+export function VaultQuoteRequestsTable() {
   return (
     <>
       <PageHeader
-        title="Quote Requests"
-        description="Product price quote requests"
-        action={<DownloadButton tableName="quote_requests" title="Quote Requests" />}
+        title="Vault - Quote Requests"
+        description="Important quote requests saved for reference"
+        action={<DownloadButton tableName="quote_requests" title="Vault - Quote Requests" isVault />}
       />
-      <DataTable
+      <VaultDataTable
         tableName="quote_requests"
         columns={columns}
         title="Quote Requests"

@@ -4,9 +4,11 @@ import { useState, useMemo, useEffect } from 'react'
 import { PageHeader } from '@/app/components/page-header'
 import { Badge, Button, Text, Input, Select, Checkbox, toast } from '@medusajs/ui'
 import { format } from 'date-fns'
-import { useSubmissions, updateSubmission, deleteSubmission } from '@/lib/hooks/use-submissions'
+import { useSubmissions, updateSubmission, deleteSubmission, vaultSubmission } from '@/lib/hooks/use-submissions'
+import { CheckCircleSolid } from '@medusajs/icons'
 import { ForwardButton } from '@/app/components/forward-button'
 import { BulkForwardDropdown } from '@/app/components/bulk-forward-dropdown'
+import { DownloadButton } from '@/app/components/download-button'
 
 interface ProductRequest {
   id: string
@@ -19,6 +21,7 @@ interface ProductRequest {
   quantity: string
   details: string
   resolved: boolean
+  vaulted: boolean
   created_at: string
 }
 
@@ -94,6 +97,15 @@ export function ProductRequestsTable() {
     }
   }
 
+  const toggleVaulted = async (id: string, currentValue: boolean) => {
+    try {
+      await vaultSubmission('product_requests', id, !currentValue, resolvedParam)
+      toast.success(currentValue ? 'Removed from vault' : 'Added to vault')
+    } catch {
+      toast.error('Failed to update')
+    }
+  }
+
   const handleDelete = async (id: string) => {
     if (!confirm('Are you sure you want to delete this item?')) return
     try {
@@ -117,6 +129,7 @@ export function ProductRequestsTable() {
       <PageHeader
         title="Product Requests"
         description="Requests for products not in catalog"
+        action={<DownloadButton tableName="product_requests" title="Product Requests" />}
       />
 
       <div className="mb-6 flex flex-col sm:flex-row gap-4 justify-between">
@@ -248,6 +261,14 @@ export function ProductRequestsTable() {
                 <Text className="text-xs text-ui-fg-muted">{formatDate(item.created_at)}</Text>
                 <div className="flex gap-2" onClick={(e) => e.stopPropagation()}>
                   <ForwardButton table="product_requests" submission={item} />
+                  <Button
+                    variant={item.vaulted ? 'primary' : 'secondary'}
+                    size="small"
+                    onClick={() => toggleVaulted(item.id, item.vaulted)}
+                    className={item.vaulted ? 'bg-purple-600 hover:bg-purple-700' : ''}
+                  >
+                    {item.vaulted ? <CheckCircleSolid className="w-4 h-4" /> : 'Vault'}
+                  </Button>
                   <Button
                     variant="secondary"
                     size="small"

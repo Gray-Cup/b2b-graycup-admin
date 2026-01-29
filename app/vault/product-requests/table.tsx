@@ -2,51 +2,51 @@
 
 import { useState, useMemo, useEffect } from 'react'
 import { PageHeader } from '@/app/components/page-header'
-import { Badge, Button, Text, Input, Select, Checkbox, toast } from '@medusajs/ui'
+import { Badge, Button, Text, Input, Checkbox, toast } from '@medusajs/ui'
 import { format } from 'date-fns'
-import { useSubmissions, updateSubmission, deleteSubmission, vaultSubmission } from '@/lib/hooks/use-submissions'
-import { CheckCircleSolid } from '@medusajs/icons'
+import { useSubmissions, vaultSubmission, deleteSubmission } from '@/lib/hooks/use-submissions'
 import { ForwardButton } from '@/app/components/forward-button'
 import { BulkForwardDropdown } from '@/app/components/bulk-forward-dropdown'
 import { DownloadButton } from '@/app/components/download-button'
 
-interface CallRequest {
+interface ProductRequest {
   id: string
+  company: string
   name: string
+  email: string
   phone: string
-  company_name: string
-  agenda: string
+  category: string
+  product_name: string
+  quantity: string
+  details: string
   resolved: boolean
   vaulted: boolean
   created_at: string
 }
 
-export function CallRequestsTable() {
-  const [filter, setFilter] = useState<'all' | 'resolved' | 'unresolved'>('unresolved')
+export function VaultProductRequestsTable() {
   const [search, setSearch] = useState('')
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set())
   const [selectMode, setSelectMode] = useState(false)
 
-  const resolvedParam = filter === 'all' ? null : filter === 'resolved' ? 'true' : 'false'
   const { data, isLoading, isValidating } = useSubmissions({
-    table: 'call_requests',
-    resolved: resolvedParam,
+    table: 'product_requests',
+    vaulted: 'true',
   })
 
   const filteredData = useMemo(() => {
-    if (!search) return data as CallRequest[]
+    if (!search) return data as ProductRequest[]
     const searchLower = search.toLowerCase()
-    return (data as CallRequest[]).filter((row) =>
+    return (data as ProductRequest[]).filter((row) =>
       Object.values(row).some((value) =>
         String(value).toLowerCase().includes(searchLower)
       )
     )
   }, [data, search])
 
-  // Clear selection when filter or search changes
   useEffect(() => {
     setSelectedIds(new Set())
-  }, [filter, search])
+  }, [search])
 
   const toggleSelect = (id: string) => {
     setSelectedIds(prev => {
@@ -84,28 +84,19 @@ export function CallRequestsTable() {
     return filteredData.filter((row) => selectedIds.has(row.id))
   }, [filteredData, selectedIds])
 
-  const toggleResolved = async (id: string, currentValue: boolean) => {
+  const handleUnvault = async (id: string) => {
     try {
-      await updateSubmission('call_requests', id, !currentValue, resolvedParam)
-      toast.success(currentValue ? 'Marked as unresolved' : 'Marked as resolved')
+      await vaultSubmission('product_requests', id, false, null)
+      toast.success('Removed from vault')
     } catch {
-      toast.error('Failed to update')
-    }
-  }
-
-  const toggleVaulted = async (id: string, currentValue: boolean) => {
-    try {
-      await vaultSubmission('call_requests', id, !currentValue, resolvedParam)
-      toast.success(currentValue ? 'Removed from vault' : 'Added to vault')
-    } catch {
-      toast.error('Failed to update')
+      toast.error('Failed to remove from vault')
     }
   }
 
   const handleDelete = async (id: string) => {
     if (!confirm('Are you sure you want to delete this item?')) return
     try {
-      await deleteSubmission('call_requests', id, resolvedParam)
+      await deleteSubmission('product_requests', id, null)
       toast.success('Deleted successfully')
     } catch {
       toast.error('Failed to delete')
@@ -123,23 +114,13 @@ export function CallRequestsTable() {
   return (
     <>
       <PageHeader
-        title="Call Requests"
-        description="Callback requests from sales team"
-        action={<DownloadButton tableName="call_requests" title="Call Requests" />}
+        title="Vault - Product Requests"
+        description="Important product requests saved for reference"
+        action={<DownloadButton tableName="product_requests" title="Vault - Product Requests" isVault />}
       />
 
       <div className="mb-6 flex flex-col sm:flex-row gap-4 justify-between">
         <div className="flex gap-3 items-center flex-wrap">
-          <Select value={filter} onValueChange={(v) => setFilter(v as typeof filter)}>
-            <Select.Trigger>
-              <Select.Value placeholder="Filter" />
-            </Select.Trigger>
-            <Select.Content>
-              <Select.Item value="unresolved">Unresolved</Select.Item>
-              <Select.Item value="resolved">Resolved</Select.Item>
-              <Select.Item value="all">All</Select.Item>
-            </Select.Content>
-          </Select>
           {isValidating && !isLoading && (
             <Text className="text-xs text-ui-fg-muted">Updating...</Text>
           )}
@@ -164,7 +145,7 @@ export function CallRequestsTable() {
 
           {selectMode && selectedIds.size > 0 && (
             <BulkForwardDropdown
-              tableName="call_requests"
+              tableName="product_requests"
               selectedSubmissions={selectedSubmissions}
               onSuccess={clearSelection}
             />
@@ -184,7 +165,7 @@ export function CallRequestsTable() {
         </div>
       ) : filteredData.length === 0 ? (
         <div className="p-8 text-center bg-ui-bg-base rounded-lg border border-ui-border-base">
-          <Text className="text-ui-fg-subtle">No call requests found</Text>
+          <Text className="text-ui-fg-subtle">No vaulted product requests</Text>
         </div>
       ) : (
         <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4">
@@ -210,48 +191,59 @@ export function CallRequestsTable() {
                     />
                   )}
                   <div className="min-w-0 flex-1">
-                    <Text className="font-medium text-ui-fg-base truncate">{item.name || 'No name'}</Text>
-                    <Text className="text-sm text-ui-fg-subtle">{item.company_name || 'No company'}</Text>
+                    <Text className="font-medium text-ui-fg-base truncate">{item.company || 'No company'}</Text>
+                    <Text className="text-sm text-ui-fg-subtle">{item.name}</Text>
                   </div>
                 </div>
-                <Badge color={item.resolved ? 'green' : 'orange'} className="shrink-0">
-                  {item.resolved ? 'Resolved' : 'Pending'}
+                <Badge color="purple" className="shrink-0">
+                  Vaulted
                 </Badge>
               </div>
 
-              {/* Phone */}
-              <div className="bg-ui-bg-subtle rounded-md p-3">
-                <Text className="text-xs text-ui-fg-muted uppercase tracking-wide mb-1">Phone</Text>
-                <Text className="font-medium text-ui-fg-base">{item.phone || '-'}</Text>
+              {/* Product Info */}
+              <div className="bg-ui-bg-subtle rounded-md p-3 space-y-2">
+                <div className="flex justify-between items-center">
+                  <Text className="text-xs text-ui-fg-muted uppercase tracking-wide">Product</Text>
+                  <Badge color="blue" className="text-xs">{item.category || 'N/A'}</Badge>
+                </div>
+                <Text className="font-medium text-ui-fg-base">{item.product_name || '-'}</Text>
+                <div className="flex justify-between text-sm">
+                  <Text className="text-ui-fg-muted">Quantity:</Text>
+                  <Text className="text-ui-fg-base font-medium">{item.quantity || '-'}</Text>
+                </div>
               </div>
 
-              {/* Agenda */}
-              {item.agenda && (
-                <div className="flex-1">
-                  <Text className="text-xs text-ui-fg-muted uppercase tracking-wide mb-1">Agenda</Text>
-                  <Text className="text-sm text-ui-fg-subtle line-clamp-3">{item.agenda}</Text>
+              {/* Details */}
+              {item.details && (
+                <div>
+                  <Text className="text-xs text-ui-fg-muted uppercase tracking-wide mb-1">Details</Text>
+                  <Text className="text-sm text-ui-fg-subtle line-clamp-2">{item.details}</Text>
                 </div>
               )}
+
+              {/* Contact Info */}
+              <div className="text-sm space-y-1">
+                <div className="flex gap-2">
+                  <Text className="text-ui-fg-muted shrink-0">Email:</Text>
+                  <Text className="text-ui-fg-base truncate">{item.email || '-'}</Text>
+                </div>
+                <div className="flex gap-2">
+                  <Text className="text-ui-fg-muted shrink-0">Phone:</Text>
+                  <Text className="text-ui-fg-base">{item.phone || '-'}</Text>
+                </div>
+              </div>
 
               {/* Footer */}
               <div className="flex items-center justify-between pt-3 border-t border-ui-border-base mt-auto">
                 <Text className="text-xs text-ui-fg-muted">{formatDate(item.created_at)}</Text>
                 <div className="flex gap-2" onClick={(e) => e.stopPropagation()}>
-                  <ForwardButton table="call_requests" submission={item} />
-                  <Button
-                    variant={item.vaulted ? 'primary' : 'secondary'}
-                    size="small"
-                    onClick={() => toggleVaulted(item.id, item.vaulted)}
-                    className={item.vaulted ? 'bg-purple-600 hover:bg-purple-700' : ''}
-                  >
-                    {item.vaulted ? <CheckCircleSolid className="w-4 h-4" /> : 'Vault'}
-                  </Button>
+                  <ForwardButton table="product_requests" submission={item} />
                   <Button
                     variant="secondary"
                     size="small"
-                    onClick={() => toggleResolved(item.id, item.resolved)}
+                    onClick={() => handleUnvault(item.id)}
                   >
-                    {item.resolved ? 'Unresolve' : 'Resolve'}
+                    Unvault
                   </Button>
                   <Button
                     variant="danger"

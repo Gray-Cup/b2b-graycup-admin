@@ -2,51 +2,63 @@
 
 import { useState, useMemo, useEffect } from 'react'
 import { PageHeader } from '@/app/components/page-header'
-import { Badge, Button, Text, Input, Select, Checkbox, toast } from '@medusajs/ui'
+import { Badge, Button, Text, Input, Checkbox, toast } from '@medusajs/ui'
 import { format } from 'date-fns'
-import { useSubmissions, updateSubmission, deleteSubmission, vaultSubmission } from '@/lib/hooks/use-submissions'
-import { CheckCircleSolid } from '@medusajs/icons'
+import { useSubmissions, vaultSubmission, deleteSubmission } from '@/lib/hooks/use-submissions'
 import { ForwardButton } from '@/app/components/forward-button'
 import { BulkForwardDropdown } from '@/app/components/bulk-forward-dropdown'
 import { DownloadButton } from '@/app/components/download-button'
 
-interface CallRequest {
+interface Feedback {
   id: string
+  company: string
   name: string
-  phone: string
-  company_name: string
-  agenda: string
+  email: string
+  feedback_type: string
+  rating: string
+  feedback: string
   resolved: boolean
   vaulted: boolean
   created_at: string
 }
 
-export function CallRequestsTable() {
-  const [filter, setFilter] = useState<'all' | 'resolved' | 'unresolved'>('unresolved')
+const ratingColors: Record<string, 'green' | 'blue' | 'orange' | 'red' | 'grey'> = {
+  Excellent: 'green',
+  Good: 'blue',
+  Average: 'orange',
+  Poor: 'red',
+}
+
+const ratingEmoji: Record<string, string> = {
+  Excellent: '5/5',
+  Good: '4/5',
+  Average: '3/5',
+  Poor: '2/5',
+}
+
+export function VaultFeedbackTable() {
   const [search, setSearch] = useState('')
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set())
   const [selectMode, setSelectMode] = useState(false)
 
-  const resolvedParam = filter === 'all' ? null : filter === 'resolved' ? 'true' : 'false'
   const { data, isLoading, isValidating } = useSubmissions({
-    table: 'call_requests',
-    resolved: resolvedParam,
+    table: 'feedback_submissions',
+    vaulted: 'true',
   })
 
   const filteredData = useMemo(() => {
-    if (!search) return data as CallRequest[]
+    if (!search) return data as Feedback[]
     const searchLower = search.toLowerCase()
-    return (data as CallRequest[]).filter((row) =>
+    return (data as Feedback[]).filter((row) =>
       Object.values(row).some((value) =>
         String(value).toLowerCase().includes(searchLower)
       )
     )
   }, [data, search])
 
-  // Clear selection when filter or search changes
   useEffect(() => {
     setSelectedIds(new Set())
-  }, [filter, search])
+  }, [search])
 
   const toggleSelect = (id: string) => {
     setSelectedIds(prev => {
@@ -84,28 +96,19 @@ export function CallRequestsTable() {
     return filteredData.filter((row) => selectedIds.has(row.id))
   }, [filteredData, selectedIds])
 
-  const toggleResolved = async (id: string, currentValue: boolean) => {
+  const handleUnvault = async (id: string) => {
     try {
-      await updateSubmission('call_requests', id, !currentValue, resolvedParam)
-      toast.success(currentValue ? 'Marked as unresolved' : 'Marked as resolved')
+      await vaultSubmission('feedback_submissions', id, false, null)
+      toast.success('Removed from vault')
     } catch {
-      toast.error('Failed to update')
-    }
-  }
-
-  const toggleVaulted = async (id: string, currentValue: boolean) => {
-    try {
-      await vaultSubmission('call_requests', id, !currentValue, resolvedParam)
-      toast.success(currentValue ? 'Removed from vault' : 'Added to vault')
-    } catch {
-      toast.error('Failed to update')
+      toast.error('Failed to remove from vault')
     }
   }
 
   const handleDelete = async (id: string) => {
     if (!confirm('Are you sure you want to delete this item?')) return
     try {
-      await deleteSubmission('call_requests', id, resolvedParam)
+      await deleteSubmission('feedback_submissions', id, null)
       toast.success('Deleted successfully')
     } catch {
       toast.error('Failed to delete')
@@ -123,23 +126,13 @@ export function CallRequestsTable() {
   return (
     <>
       <PageHeader
-        title="Call Requests"
-        description="Callback requests from sales team"
-        action={<DownloadButton tableName="call_requests" title="Call Requests" />}
+        title="Vault - Feedback"
+        description="Important feedback saved for reference"
+        action={<DownloadButton tableName="feedback_submissions" title="Vault - Feedback" isVault />}
       />
 
       <div className="mb-6 flex flex-col sm:flex-row gap-4 justify-between">
         <div className="flex gap-3 items-center flex-wrap">
-          <Select value={filter} onValueChange={(v) => setFilter(v as typeof filter)}>
-            <Select.Trigger>
-              <Select.Value placeholder="Filter" />
-            </Select.Trigger>
-            <Select.Content>
-              <Select.Item value="unresolved">Unresolved</Select.Item>
-              <Select.Item value="resolved">Resolved</Select.Item>
-              <Select.Item value="all">All</Select.Item>
-            </Select.Content>
-          </Select>
           {isValidating && !isLoading && (
             <Text className="text-xs text-ui-fg-muted">Updating...</Text>
           )}
@@ -164,7 +157,7 @@ export function CallRequestsTable() {
 
           {selectMode && selectedIds.size > 0 && (
             <BulkForwardDropdown
-              tableName="call_requests"
+              tableName="feedback_submissions"
               selectedSubmissions={selectedSubmissions}
               onSuccess={clearSelection}
             />
@@ -184,7 +177,7 @@ export function CallRequestsTable() {
         </div>
       ) : filteredData.length === 0 ? (
         <div className="p-8 text-center bg-ui-bg-base rounded-lg border border-ui-border-base">
-          <Text className="text-ui-fg-subtle">No call requests found</Text>
+          <Text className="text-ui-fg-subtle">No vaulted feedback</Text>
         </div>
       ) : (
         <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4">
@@ -210,48 +203,59 @@ export function CallRequestsTable() {
                     />
                   )}
                   <div className="min-w-0 flex-1">
-                    <Text className="font-medium text-ui-fg-base truncate">{item.name || 'No name'}</Text>
-                    <Text className="text-sm text-ui-fg-subtle">{item.company_name || 'No company'}</Text>
+                    <Text className="font-medium text-ui-fg-base truncate">{item.company || 'No company'}</Text>
+                    <Text className="text-sm text-ui-fg-subtle">{item.name}</Text>
                   </div>
                 </div>
-                <Badge color={item.resolved ? 'green' : 'orange'} className="shrink-0">
-                  {item.resolved ? 'Resolved' : 'Pending'}
+                <Badge color="purple" className="shrink-0">
+                  Vaulted
                 </Badge>
               </div>
 
-              {/* Phone */}
-              <div className="bg-ui-bg-subtle rounded-md p-3">
-                <Text className="text-xs text-ui-fg-muted uppercase tracking-wide mb-1">Phone</Text>
-                <Text className="font-medium text-ui-fg-base">{item.phone || '-'}</Text>
+              {/* Rating & Type */}
+              <div className="bg-ui-bg-subtle rounded-md p-3 space-y-2">
+                <div className="flex justify-between items-center">
+                  <Text className="text-xs text-ui-fg-muted uppercase tracking-wide">Type</Text>
+                  <Text className="text-sm font-medium text-ui-fg-base">{item.feedback_type || 'General'}</Text>
+                </div>
+                <div className="flex justify-between items-center">
+                  <Text className="text-xs text-ui-fg-muted uppercase tracking-wide">Rating</Text>
+                  <div className="flex items-center gap-2">
+                    <Badge color={ratingColors[item.rating] ?? 'grey'}>
+                      {item.rating || 'N/A'}
+                    </Badge>
+                    <Text className="text-sm text-ui-fg-muted">{ratingEmoji[item.rating] || ''}</Text>
+                  </div>
+                </div>
               </div>
 
-              {/* Agenda */}
-              {item.agenda && (
+              {/* Feedback Content */}
+              {item.feedback && (
                 <div className="flex-1">
-                  <Text className="text-xs text-ui-fg-muted uppercase tracking-wide mb-1">Agenda</Text>
-                  <Text className="text-sm text-ui-fg-subtle line-clamp-3">{item.agenda}</Text>
+                  <Text className="text-xs text-ui-fg-muted uppercase tracking-wide mb-1">Feedback</Text>
+                  <Text className="text-sm text-ui-fg-subtle line-clamp-3">{item.feedback}</Text>
                 </div>
               )}
+
+              {/* Contact Info */}
+              <div className="text-sm">
+                <div className="flex gap-2">
+                  <Text className="text-ui-fg-muted shrink-0">Email:</Text>
+                  <Text className="text-ui-fg-base truncate">{item.email || '-'}</Text>
+                </div>
+              </div>
 
               {/* Footer */}
               <div className="flex items-center justify-between pt-3 border-t border-ui-border-base mt-auto">
                 <Text className="text-xs text-ui-fg-muted">{formatDate(item.created_at)}</Text>
                 <div className="flex gap-2" onClick={(e) => e.stopPropagation()}>
-                  <ForwardButton table="call_requests" submission={item} />
-                  <Button
-                    variant={item.vaulted ? 'primary' : 'secondary'}
-                    size="small"
-                    onClick={() => toggleVaulted(item.id, item.vaulted)}
-                    className={item.vaulted ? 'bg-purple-600 hover:bg-purple-700' : ''}
-                  >
-                    {item.vaulted ? <CheckCircleSolid className="w-4 h-4" /> : 'Vault'}
-                  </Button>
+                  <ForwardButton table="feedback_submissions" submission={item} />
                   <Button
                     variant="secondary"
                     size="small"
-                    onClick={() => toggleResolved(item.id, item.resolved)}
+                    onClick={() => handleUnvault(item.id)}
                   >
-                    {item.resolved ? 'Unresolve' : 'Resolve'}
+                    Unvault
                   </Button>
                   <Button
                     variant="danger"

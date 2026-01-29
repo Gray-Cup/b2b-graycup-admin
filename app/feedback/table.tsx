@@ -4,9 +4,11 @@ import { useState, useMemo, useEffect } from 'react'
 import { PageHeader } from '@/app/components/page-header'
 import { Badge, Button, Text, Input, Select, Checkbox, toast } from '@medusajs/ui'
 import { format } from 'date-fns'
-import { useSubmissions, updateSubmission, deleteSubmission } from '@/lib/hooks/use-submissions'
+import { useSubmissions, updateSubmission, deleteSubmission, vaultSubmission } from '@/lib/hooks/use-submissions'
+import { CheckCircleSolid } from '@medusajs/icons'
 import { ForwardButton } from '@/app/components/forward-button'
 import { BulkForwardDropdown } from '@/app/components/bulk-forward-dropdown'
+import { DownloadButton } from '@/app/components/download-button'
 
 interface Feedback {
   id: string
@@ -17,6 +19,7 @@ interface Feedback {
   rating: string
   feedback: string
   resolved: boolean
+  vaulted: boolean
   created_at: string
 }
 
@@ -106,6 +109,15 @@ export function FeedbackTable() {
     }
   }
 
+  const toggleVaulted = async (id: string, currentValue: boolean) => {
+    try {
+      await vaultSubmission('feedback_submissions', id, !currentValue, resolvedParam)
+      toast.success(currentValue ? 'Removed from vault' : 'Added to vault')
+    } catch {
+      toast.error('Failed to update')
+    }
+  }
+
   const handleDelete = async (id: string) => {
     if (!confirm('Are you sure you want to delete this item?')) return
     try {
@@ -129,6 +141,7 @@ export function FeedbackTable() {
       <PageHeader
         title="Feedback"
         description="Customer feedback and ratings"
+        action={<DownloadButton tableName="feedback_submissions" title="Feedback" />}
       />
 
       <div className="mb-6 flex flex-col sm:flex-row gap-4 justify-between">
@@ -260,6 +273,14 @@ export function FeedbackTable() {
                 <Text className="text-xs text-ui-fg-muted">{formatDate(item.created_at)}</Text>
                 <div className="flex gap-2" onClick={(e) => e.stopPropagation()}>
                   <ForwardButton table="feedback_submissions" submission={item} />
+                  <Button
+                    variant={item.vaulted ? 'primary' : 'secondary'}
+                    size="small"
+                    onClick={() => toggleVaulted(item.id, item.vaulted)}
+                    className={item.vaulted ? 'bg-purple-600 hover:bg-purple-700' : ''}
+                  >
+                    {item.vaulted ? <CheckCircleSolid className="w-4 h-4" /> : 'Vault'}
+                  </Button>
                   <Button
                     variant="secondary"
                     size="small"

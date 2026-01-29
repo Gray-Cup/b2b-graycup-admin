@@ -2,10 +2,9 @@
 
 import { useState, useMemo, useEffect } from 'react'
 import { PageHeader } from '@/app/components/page-header'
-import { Badge, Button, Text, Input, Select, Checkbox, toast } from '@medusajs/ui'
+import { Badge, Button, Text, Input, Checkbox, toast } from '@medusajs/ui'
 import { format } from 'date-fns'
-import { useSubmissions, updateSubmission, deleteSubmission, vaultSubmission } from '@/lib/hooks/use-submissions'
-import { CheckCircleSolid } from '@medusajs/icons'
+import { useSubmissions, vaultSubmission, deleteSubmission } from '@/lib/hooks/use-submissions'
 import { ForwardButton } from '@/app/components/forward-button'
 import { BulkForwardDropdown } from '@/app/components/bulk-forward-dropdown'
 import { DownloadButton } from '@/app/components/download-button'
@@ -21,16 +20,14 @@ interface CallRequest {
   created_at: string
 }
 
-export function CallRequestsTable() {
-  const [filter, setFilter] = useState<'all' | 'resolved' | 'unresolved'>('unresolved')
+export function VaultCallRequestsTable() {
   const [search, setSearch] = useState('')
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set())
   const [selectMode, setSelectMode] = useState(false)
 
-  const resolvedParam = filter === 'all' ? null : filter === 'resolved' ? 'true' : 'false'
   const { data, isLoading, isValidating } = useSubmissions({
     table: 'call_requests',
-    resolved: resolvedParam,
+    vaulted: 'true',
   })
 
   const filteredData = useMemo(() => {
@@ -43,10 +40,9 @@ export function CallRequestsTable() {
     )
   }, [data, search])
 
-  // Clear selection when filter or search changes
   useEffect(() => {
     setSelectedIds(new Set())
-  }, [filter, search])
+  }, [search])
 
   const toggleSelect = (id: string) => {
     setSelectedIds(prev => {
@@ -84,28 +80,19 @@ export function CallRequestsTable() {
     return filteredData.filter((row) => selectedIds.has(row.id))
   }, [filteredData, selectedIds])
 
-  const toggleResolved = async (id: string, currentValue: boolean) => {
+  const handleUnvault = async (id: string) => {
     try {
-      await updateSubmission('call_requests', id, !currentValue, resolvedParam)
-      toast.success(currentValue ? 'Marked as unresolved' : 'Marked as resolved')
+      await vaultSubmission('call_requests', id, false, null)
+      toast.success('Removed from vault')
     } catch {
-      toast.error('Failed to update')
-    }
-  }
-
-  const toggleVaulted = async (id: string, currentValue: boolean) => {
-    try {
-      await vaultSubmission('call_requests', id, !currentValue, resolvedParam)
-      toast.success(currentValue ? 'Removed from vault' : 'Added to vault')
-    } catch {
-      toast.error('Failed to update')
+      toast.error('Failed to remove from vault')
     }
   }
 
   const handleDelete = async (id: string) => {
     if (!confirm('Are you sure you want to delete this item?')) return
     try {
-      await deleteSubmission('call_requests', id, resolvedParam)
+      await deleteSubmission('call_requests', id, null)
       toast.success('Deleted successfully')
     } catch {
       toast.error('Failed to delete')
@@ -123,23 +110,13 @@ export function CallRequestsTable() {
   return (
     <>
       <PageHeader
-        title="Call Requests"
-        description="Callback requests from sales team"
-        action={<DownloadButton tableName="call_requests" title="Call Requests" />}
+        title="Vault - Call Requests"
+        description="Important call requests saved for reference"
+        action={<DownloadButton tableName="call_requests" title="Vault - Call Requests" isVault />}
       />
 
       <div className="mb-6 flex flex-col sm:flex-row gap-4 justify-between">
         <div className="flex gap-3 items-center flex-wrap">
-          <Select value={filter} onValueChange={(v) => setFilter(v as typeof filter)}>
-            <Select.Trigger>
-              <Select.Value placeholder="Filter" />
-            </Select.Trigger>
-            <Select.Content>
-              <Select.Item value="unresolved">Unresolved</Select.Item>
-              <Select.Item value="resolved">Resolved</Select.Item>
-              <Select.Item value="all">All</Select.Item>
-            </Select.Content>
-          </Select>
           {isValidating && !isLoading && (
             <Text className="text-xs text-ui-fg-muted">Updating...</Text>
           )}
@@ -184,7 +161,7 @@ export function CallRequestsTable() {
         </div>
       ) : filteredData.length === 0 ? (
         <div className="p-8 text-center bg-ui-bg-base rounded-lg border border-ui-border-base">
-          <Text className="text-ui-fg-subtle">No call requests found</Text>
+          <Text className="text-ui-fg-subtle">No vaulted call requests</Text>
         </div>
       ) : (
         <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4">
@@ -214,8 +191,8 @@ export function CallRequestsTable() {
                     <Text className="text-sm text-ui-fg-subtle">{item.company_name || 'No company'}</Text>
                   </div>
                 </div>
-                <Badge color={item.resolved ? 'green' : 'orange'} className="shrink-0">
-                  {item.resolved ? 'Resolved' : 'Pending'}
+                <Badge color="purple" className="shrink-0">
+                  Vaulted
                 </Badge>
               </div>
 
@@ -239,19 +216,11 @@ export function CallRequestsTable() {
                 <div className="flex gap-2" onClick={(e) => e.stopPropagation()}>
                   <ForwardButton table="call_requests" submission={item} />
                   <Button
-                    variant={item.vaulted ? 'primary' : 'secondary'}
-                    size="small"
-                    onClick={() => toggleVaulted(item.id, item.vaulted)}
-                    className={item.vaulted ? 'bg-purple-600 hover:bg-purple-700' : ''}
-                  >
-                    {item.vaulted ? <CheckCircleSolid className="w-4 h-4" /> : 'Vault'}
-                  </Button>
-                  <Button
                     variant="secondary"
                     size="small"
-                    onClick={() => toggleResolved(item.id, item.resolved)}
+                    onClick={() => handleUnvault(item.id)}
                   >
-                    {item.resolved ? 'Unresolve' : 'Resolve'}
+                    Unvault
                   </Button>
                   <Button
                     variant="danger"

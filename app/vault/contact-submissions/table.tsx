@@ -1,7 +1,7 @@
 'use client'
 
-import { DataTable } from '@/app/components/data-table'
 import { PageHeader } from '@/app/components/page-header'
+import { VaultDataTable } from '@/app/components/vault-data-table'
 import { DownloadButton } from '@/app/components/download-button'
 import { Text } from '@medusajs/ui'
 
@@ -19,15 +19,15 @@ const columns = [
   },
 ]
 
-export function ContactSubmissionsTable() {
+export function VaultContactSubmissionsTable() {
   return (
     <>
       <PageHeader
-        title="Contact Submissions"
-        description="General inquiries from the contact form"
-        action={<DownloadButton tableName="contact_submissions" title="Contact Submissions" />}
+        title="Vault - Contact Submissions"
+        description="Important contact submissions saved for reference"
+        action={<DownloadButton tableName="contact_submissions" title="Vault - Contact Submissions" isVault />}
       />
-      <DataTable
+      <VaultDataTable
         tableName="contact_submissions"
         columns={columns}
         title="Contact Submissions"

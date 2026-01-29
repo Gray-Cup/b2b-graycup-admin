@@ -8,13 +8,19 @@ export function getSupabase(): SupabaseClient {
   }
 
   const supabaseUrl = process.env.SUPABASE_URL
-  const supabaseServiceKey = process.env.SUPABASE_SERVICE_ROLE_KEY
 
-  if (!supabaseUrl || !supabaseServiceKey) {
-    throw new Error('Missing Supabase environment variables')
+  // Prefer new secret key format, fall back to legacy service role key
+  const supabaseKey = process.env.SUPABASE_SECRET_KEY
+    || process.env.SUPABASE_SERVICE_ROLE_KEY
+
+  if (!supabaseUrl || !supabaseKey) {
+    throw new Error(
+      'Missing SUPABASE_URL or Supabase server key. ' +
+      'Set either SUPABASE_SECRET_KEY (preferred) or SUPABASE_SERVICE_ROLE_KEY (legacy)'
+    )
   }
 
-  supabaseInstance = createClient(supabaseUrl, supabaseServiceKey, {
+  supabaseInstance = createClient(supabaseUrl, supabaseKey, {
     auth: {
       autoRefreshToken: false,
       persistSession: false

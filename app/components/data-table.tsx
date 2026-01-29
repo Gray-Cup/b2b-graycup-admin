@@ -1,9 +1,12 @@
 'use client'
 
-import { useState, useMemo } from 'react'
-import { Table, Button, Badge, Text, Input, Select, toast } from '@medusajs/ui'
+import { useState, useMemo, useRef, useEffect } from 'react'
+import { Table, Button, Badge, Text, Input, Select, Checkbox, toast } from '@medusajs/ui'
+import { ArrowUpRightOnBox } from '@medusajs/icons'
 import { format } from 'date-fns'
 import { useSubmissions, updateSubmission, deleteSubmission } from '@/lib/hooks/use-submissions'
+import { ForwardButton } from '@/app/components/forward-button'
+import { useWebhooks, bulkForwardToDiscord } from '@/lib/hooks/use-webhooks'
 
 interface Column {
   key: string
@@ -20,6 +23,8 @@ interface DataTableProps {
 export function DataTable({ tableName, columns, title }: DataTableProps) {
   const [filter, setFilter] = useState<'all' | 'resolved' | 'unresolved'>('unresolved')
   const [search, setSearch] = useState('')
+  const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set())
+  const [selectMode, setSelectMode] = useState(false)
 
   const resolvedParam = filter === 'all' ? null : filter === 'resolved' ? 'true' : 'false'
   const { data, isLoading, isValidating } = useSubmissions({
@@ -36,6 +41,47 @@ export function DataTable({ tableName, columns, title }: DataTableProps) {
       )
     )
   }, [data, search])
+
+  // Clear selection when filter or search changes
+  useEffect(() => {
+    setSelectedIds(new Set())
+  }, [filter, search])
+
+  const toggleSelect = (id: string) => {
+    setSelectedIds(prev => {
+      const newSet = new Set(prev)
+      if (newSet.has(id)) {
+        newSet.delete(id)
+      } else {
+        newSet.add(id)
+      }
+      return newSet
+    })
+  }
+
+  const toggleSelectAll = () => {
+    if (selectedIds.size === filteredData.length) {
+      setSelectedIds(new Set())
+    } else {
+      setSelectedIds(new Set(filteredData.map((row: Record<string, unknown>) => row.id as string)))
+    }
+  }
+
+  const clearSelection = () => {
+    setSelectedIds(new Set())
+    setSelectMode(false)
+  }
+
+  const toggleSelectMode = () => {
+    if (selectMode) {
+      setSelectedIds(new Set())
+    }
+    setSelectMode(!selectMode)
+  }
+
+  const selectedSubmissions = useMemo(() => {
+    return filteredData.filter((row: Record<string, unknown>) => selectedIds.has(row.id as string))
+  }, [filteredData, selectedIds])
 
   const toggleResolved = async (id: string, currentValue: boolean) => {
     try {
@@ -82,6 +128,23 @@ export function DataTable({ tableName, columns, title }: DataTableProps) {
           {isValidating && !isLoading && (
             <Text className="text-xs text-ui-fg-muted">Updating...</Text>
           )}
+
+          {/* Select mode toggle and forward button */}
+          <Button
+            variant={selectMode ? 'primary' : 'secondary'}
+            size="small"
+            onClick={toggleSelectMode}
+          >
+            {selectMode ? `${selectedIds.size} Selected` : 'Select'}
+          </Button>
+
+          {selectMode && selectedIds.size > 0 && (
+            <ForwardDropdown
+              tableName={tableName}
+              selectedSubmissions={selectedSubmissions}
+              onSuccess={clearSelection}
+            />
+          )}
         </div>
         <Input
           placeholder="Search..."
@@ -104,6 +167,14 @@ export function DataTable({ tableName, columns, title }: DataTableProps) {
           <Table>
             <Table.Header>
               <Table.Row>
+                {selectMode && (
+                  <Table.HeaderCell className="w-10">
+                    <Checkbox
+                      checked={filteredData.length > 0 && selectedIds.size === filteredData.length}
+                      onCheckedChange={toggleSelectAll}
+                    />
+                  </Table.HeaderCell>
+                )}
                 <Table.HeaderCell>Status</Table.HeaderCell>
                 {columns.map((col) => (
                   <Table.HeaderCell key={col.key}>{col.label}</Table.HeaderCell>
@@ -114,7 +185,20 @@ export function DataTable({ tableName, columns, title }: DataTableProps) {
             </Table.Header>
             <Table.Body>
               {filteredData.map((row: Record<string, unknown>) => (
-                <Table.Row key={row.id as string}>
+                <Table.Row
+                  key={row.id as string}
+                  className={selectMode && selectedIds.has(row.id as string) ? 'bg-ui-bg-subtle' : ''}
+                  onClick={selectMode ? () => toggleSelect(row.id as string) : undefined}
+                  style={selectMode ? { cursor: 'pointer' } : undefined}
+                >
+                  {selectMode && (
+                    <Table.Cell onClick={(e) => e.stopPropagation()}>
+                      <Checkbox
+                        checked={selectedIds.has(row.id as string)}
+                        onCheckedChange={() => toggleSelect(row.id as string)}
+                      />
+                    </Table.Cell>
+                  )}
                   <Table.Cell>
                     <Badge color={row.resolved ? 'green' : 'orange'}>
                       {row.resolved ? 'Resolved' : 'Pending'}
@@ -132,8 +216,9 @@ export function DataTable({ tableName, columns, title }: DataTableProps) {
                       {formatDate(row.created_at as string)}
                     </Text>
                   </Table.Cell>
-                  <Table.Cell>
+                  <Table.Cell onClick={(e) => e.stopPropagation()}>
                     <div className="flex gap-2">
+                      <ForwardButton table={tableName} submission={row} />
                       <Button
                         variant="secondary"
                         size="small"
@@ -162,6 +247,96 @@ export function DataTable({ tableName, columns, title }: DataTableProps) {
           Showing {filteredData.length} of {data.length} items
         </Text>
       </div>
+    </div>
+  )
+}
+
+// Forward Dropdown Component
+function ForwardDropdown({
+  tableName,
+  selectedSubmissions,
+  onSuccess,
+}: {
+  tableName: string
+  selectedSubmissions: Record<string, unknown>[]
+  onSuccess: () => void
+}) {
+  const { data: webhooks, isLoading } = useWebhooks()
+  const [isOpen, setIsOpen] = useState(false)
+  const [isSending, setIsSending] = useState(false)
+  const dropdownRef = useRef<HTMLDivElement>(null)
+
+  useEffect(() => {
+    function handleClickOutside(event: MouseEvent) {
+      if (dropdownRef.current && !dropdownRef.current.contains(event.target as Node)) {
+        setIsOpen(false)
+      }
+    }
+    document.addEventListener('mousedown', handleClickOutside)
+    return () => document.removeEventListener('mousedown', handleClickOutside)
+  }, [])
+
+  const handleBulkForward = async (webhookId: string, webhookName: string) => {
+    setIsSending(true)
+    try {
+      const result = await bulkForwardToDiscord(webhookId, {
+        table: tableName,
+        submissions: selectedSubmissions,
+      })
+      if (result.failed > 0) {
+        toast.warning(`Sent ${result.succeeded}/${result.total} to ${webhookName}`)
+      } else {
+        toast.success(`Sent ${result.succeeded} items to ${webhookName}`)
+      }
+      setIsOpen(false)
+      onSuccess()
+    } catch {
+      toast.error('Failed to forward')
+    } finally {
+      setIsSending(false)
+    }
+  }
+
+  if (isLoading || webhooks.length === 0) {
+    return (
+      <Button variant="secondary" size="small" disabled>
+        <ArrowUpRightOnBox className="w-4 h-4 mr-2" />
+        Forward
+      </Button>
+    )
+  }
+
+  return (
+    <div className="relative" ref={dropdownRef}>
+      <Button
+        variant="secondary"
+        size="small"
+        onClick={() => setIsOpen(!isOpen)}
+        disabled={isSending}
+      >
+        <ArrowUpRightOnBox className="w-4 h-4 mr-2" />
+        {isSending ? 'Sending...' : 'Forward'}
+      </Button>
+
+      {isOpen && (
+        <div className="absolute top-full left-0 mt-1 w-48 bg-ui-bg-base border border-ui-border-base rounded-lg shadow-lg overflow-hidden z-50">
+          <div className="p-2 border-b border-ui-border-base">
+            <Text className="text-xs text-ui-fg-muted font-medium">Send to Discord</Text>
+          </div>
+          <div className="max-h-48 overflow-y-auto">
+            {webhooks.map((webhook) => (
+              <button
+                key={webhook.id}
+                onClick={() => handleBulkForward(webhook.id, webhook.name)}
+                disabled={isSending}
+                className="w-full px-3 py-2 text-left text-sm text-ui-fg-base hover:bg-ui-bg-subtle transition-colors disabled:opacity-50"
+              >
+                {webhook.name}
+              </button>
+            ))}
+          </div>
+        </div>
+      )}
     </div>
   )
 }

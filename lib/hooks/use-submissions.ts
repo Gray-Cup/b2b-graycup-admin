@@ -7,15 +7,13 @@ interface UseSubmissionsOptions {
   resolved?: 'true' | 'false' | null
 }
 
-interface TableCount {
+export interface TableCount {
   table: string
   label: string
   href: string
   count: number
+  unreadCount?: number
 }
-
-// Cache for 1 year (in milliseconds)
-const ONE_YEAR_MS = 365 * 24 * 60 * 60 * 1000
 
 export function useSubmissions({ table, resolved }: UseSubmissionsOptions) {
   const resolvedParam = resolved ? `&resolved=${resolved}` : ''
@@ -24,8 +22,7 @@ export function useSubmissions({ table, resolved }: UseSubmissionsOptions) {
   const { data, error, isLoading, isValidating } = useSWR(key, fetcher, {
     revalidateOnFocus: false,
     revalidateOnReconnect: false,
-    revalidateIfStale: false,
-    dedupingInterval: ONE_YEAR_MS,
+    dedupingInterval: 1000, // 1 second deduping to prevent spam
   })
 
   return {
@@ -38,14 +35,13 @@ export function useSubmissions({ table, resolved }: UseSubmissionsOptions) {
 }
 
 export function useDashboardCounts() {
-  const { data, error, isLoading } = useSWR<{ counts: TableCount[] }>(
+  const { data, error, isLoading, mutate: mutateCounts } = useSWR<{ counts: TableCount[] }>(
     '/api/dashboard/counts',
     fetcher,
     {
       revalidateOnFocus: false,
       revalidateOnReconnect: false,
-      revalidateIfStale: false,
-      dedupingInterval: ONE_YEAR_MS,
+      dedupingInterval: 1000,
     }
   )
 
@@ -53,18 +49,28 @@ export function useDashboardCounts() {
     counts: data?.counts ?? [] as TableCount[],
     error,
     isLoading,
+    mutate: mutateCounts,
   }
 }
 
 // Revalidate all related caches after mutation
-async function revalidateAllCaches(table: string) {
-  // Revalidate all filter variants for this table
-  await Promise.all([
-    mutate(`/api/submissions?table=${table}`),
-    mutate(`/api/submissions?table=${table}&resolved=true`),
-    mutate(`/api/submissions?table=${table}&resolved=false`),
-    mutate('/api/dashboard/counts'),
-  ])
+export async function revalidateAllCaches(table?: string) {
+  const tables = table
+    ? [table]
+    : ['contact_submissions', 'quote_requests', 'sample_requests', 'feedback_submissions', 'product_requests', 'call_requests']
+
+  const promises: Promise<unknown>[] = []
+
+  for (const t of tables) {
+    promises.push(
+      mutate(`/api/submissions?table=${t}`),
+      mutate(`/api/submissions?table=${t}&resolved=true`),
+      mutate(`/api/submissions?table=${t}&resolved=false`),
+    )
+  }
+  promises.push(mutate('/api/dashboard/counts'))
+
+  await Promise.all(promises)
 }
 
 // Optimistic update helper
@@ -97,7 +103,7 @@ export async function updateSubmission(
         ),
       }
     },
-    { revalidate: false }
+    { revalidate: true }
   )
 
   // Revalidate all related caches
@@ -126,7 +132,7 @@ export async function deleteSubmission(
         data: currentData.data.filter(item => item.id !== id),
       }
     },
-    { revalidate: false }
+    { revalidate: true }
   )
 
   // Revalidate all related caches

@@ -5,6 +5,7 @@ import { PageHeader } from '@/app/components/page-header'
 import { Badge, Button, Text, Input, Select, toast } from '@medusajs/ui'
 import { format } from 'date-fns'
 import { useSubmissions, updateSubmission, deleteSubmission } from '@/lib/hooks/use-submissions'
+import { ForwardButton } from '@/app/components/forward-button'
 
 interface Feedback {
   id: string
@@ -173,6 +174,7 @@ export function FeedbackTable() {
               <div className="flex items-center justify-between pt-3 border-t border-ui-border-base mt-auto">
                 <Text className="text-xs text-ui-fg-muted">{formatDate(item.created_at)}</Text>
                 <div className="flex gap-2">
+                  <ForwardButton table="feedback_submissions" submission={item} />
                   <Button
                     variant="secondary"
                     size="small"

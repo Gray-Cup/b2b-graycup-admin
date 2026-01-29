@@ -4,22 +4,37 @@ import { useState } from 'react'
 import { useRouter, usePathname } from 'next/navigation'
 import Link from 'next/link'
 import { Button, Text, IconButton } from '@medusajs/ui'
-import { BarsThree, XMark } from '@medusajs/icons'
+import { BarsThree, XMark, ChevronDownMini } from '@medusajs/icons'
+import { RealtimeProvider } from './realtime-provider'
+import { useDashboardCounts } from '@/lib/hooks/use-submissions'
 
-const navigation = [
-  { name: 'Dashboard', href: '/' },
-  { name: 'Contact Submissions', href: '/contact-submissions' },
-  { name: 'Quote Requests', href: '/quote-requests' },
-  { name: 'Sample Requests', href: '/sample-requests' },
-  { name: 'Feedback', href: '/feedback' },
-  { name: 'Product Requests', href: '/product-requests' },
-  { name: 'Call Requests', href: '/call-requests' },
+const submissionsNavigation = [
+  { name: 'Contact Submissions', href: '/contact-submissions', table: 'contact_submissions' },
+  { name: 'Quote Requests', href: '/quote-requests', table: 'quote_requests' },
+  { name: 'Sample Requests', href: '/sample-requests', table: 'sample_requests' },
+  { name: 'Feedback', href: '/feedback', table: 'feedback_submissions' },
+  { name: 'Product Requests', href: '/product-requests', table: 'product_requests' },
+  { name: 'Call Requests', href: '/call-requests', table: 'call_requests' },
 ]
 
 export function DashboardLayout({ children }: { children: React.ReactNode }) {
   const router = useRouter()
   const pathname = usePathname()
   const [sidebarOpen, setSidebarOpen] = useState(false)
+  const [submissionsOpen, setSubmissionsOpen] = useState(() => {
+    // Auto-expand if current path is a submission page
+    return submissionsNavigation.some(item => pathname === item.href)
+  })
+  const { counts } = useDashboardCounts()
+
+  // Get total unresolved count for the badge
+  const totalUnresolved = counts.reduce((sum, c) => sum + c.count, 0)
+
+  // Get count for a specific table
+  const getCount = (table: string) => {
+    const found = counts.find(c => c.table === table)
+    return found?.count ?? 0
+  }
 
   const handleLogout = async () => {
     await fetch('/api/auth/logout', { method: 'POST' })
@@ -42,7 +57,7 @@ export function DashboardLayout({ children }: { children: React.ReactNode }) {
       {/* Sidebar */}
       <aside
         className={`
-          fixed inset-y-0 left-0 w-64 bg-ui-bg-base border-r border-ui-border-base z-50
+          fixed inset-y-0 left-0 w-72 bg-ui-bg-base border-r border-ui-border-base z-50
           transform transition-transform duration-200 ease-in-out
           ${sidebarOpen ? 'translate-x-0' : '-translate-x-full'}
           lg:translate-x-0
@@ -50,8 +65,8 @@ export function DashboardLayout({ children }: { children: React.ReactNode }) {
       >
         <div className="flex flex-col h-full">
           {/* Logo + Close button */}
-          <div className="p-4 lg:p-6 border-b border-ui-border-base flex items-center justify-between">
-            <Text className="text-lg lg:text-xl font-semibold text-ui-fg-base">GrayCup Admin</Text>
+          <div className="p-3 lg:p-4 border-b border-ui-border-base flex items-center justify-between">
+            <Text className="text-sm lg:text-base font-semibold text-ui-fg-base">GrayCup Admin</Text>
             <IconButton
               variant="transparent"
               className="lg:hidden"
@@ -62,33 +77,113 @@ export function DashboardLayout({ children }: { children: React.ReactNode }) {
           </div>
 
           {/* Navigation */}
-          <nav className="flex-1 p-3 lg:p-4 space-y-1 overflow-y-auto">
-            {navigation.map((item) => {
-              const isActive = pathname === item.href
-              return (
-                <Link
-                  key={item.href}
-                  href={item.href}
-                  onClick={closeSidebar}
-                  className={`
-                    block px-3 lg:px-4 py-2 text-sm rounded-md transition-colors
-                    ${isActive
-                      ? 'bg-ui-bg-subtle text-ui-fg-base font-medium'
-                      : 'text-ui-fg-subtle hover:text-ui-fg-base hover:bg-ui-bg-subtle-hover'
-                    }
-                  `}
-                >
-                  {item.name}
-                </Link>
-              )
-            })}
+          <nav className="flex-1 p-2 lg:p-3 space-y-0.5 overflow-y-auto">
+            {/* Dashboard */}
+            <Link
+              href="/"
+              onClick={closeSidebar}
+              className={`
+                block px-3 py-2 text-sm rounded-md transition-colors
+                ${pathname === '/'
+                  ? 'bg-ui-bg-subtle text-ui-fg-base font-medium'
+                  : 'text-ui-fg-subtle hover:text-ui-fg-base hover:bg-ui-bg-subtle-hover'
+                }
+              `}
+            >
+              Dashboard
+            </Link>
+
+            {/* Submissions & Requests Collapsible */}
+            <div>
+              <button
+                onClick={() => setSubmissionsOpen(!submissionsOpen)}
+                className={`
+                  w-full flex items-center justify-between px-3 py-2 text-sm rounded-md transition-colors
+                  ${submissionsNavigation.some(item => pathname === item.href)
+                    ? 'bg-ui-bg-subtle text-ui-fg-base font-medium'
+                    : 'text-ui-fg-subtle hover:text-ui-fg-base hover:bg-ui-bg-subtle-hover'
+                  }
+                `}
+              >
+                <span className="flex items-center gap-2">
+                  Submissions & Requests
+                  {totalUnresolved > 0 && (
+                    <span className="inline-flex items-center justify-center min-w-[18px] h-[18px] px-1 text-[11px] font-medium bg-orange-100 text-orange-700 rounded-full">
+                      {totalUnresolved > 99 ? '99+' : totalUnresolved}
+                    </span>
+                  )}
+                </span>
+                <ChevronDownMini
+                  className={`w-4 h-4 transition-transform ${submissionsOpen ? 'rotate-180' : ''}`}
+                />
+              </button>
+              {submissionsOpen && (
+                <div className="ml-3 mt-0.5 space-y-0.5 border-l border-ui-border-base pl-3">
+                  {submissionsNavigation.map((item) => {
+                    const isActive = pathname === item.href
+                    const count = getCount(item.table)
+                    return (
+                      <Link
+                        key={item.href}
+                        href={item.href}
+                        onClick={closeSidebar}
+                        className={`
+                          flex items-center justify-between px-2 py-1.5 text-sm rounded-md transition-colors
+                          ${isActive
+                            ? 'bg-ui-bg-subtle text-ui-fg-base font-medium'
+                            : 'text-ui-fg-subtle hover:text-ui-fg-base hover:bg-ui-bg-subtle-hover'
+                          }
+                        `}
+                      >
+                        <span>{item.name}</span>
+                        {count > 0 && (
+                          <span className="inline-flex items-center justify-center min-w-[16px] h-[16px] px-1 text-[10px] font-medium bg-orange-100 text-orange-700 rounded-full">
+                            {count > 99 ? '99+' : count}
+                          </span>
+                        )}
+                      </Link>
+                    )
+                  })}
+                </div>
+              )}
+            </div>
+
+            {/* Analyze */}
+            <Link
+              href="/analyze"
+              onClick={closeSidebar}
+              className={`
+                block px-3 py-2 text-sm rounded-md transition-colors
+                ${pathname === '/analyze'
+                  ? 'bg-ui-bg-subtle text-ui-fg-base font-medium'
+                  : 'text-ui-fg-subtle hover:text-ui-fg-base hover:bg-ui-bg-subtle-hover'
+                }
+              `}
+            >
+              Analyze
+            </Link>
+
+            {/* Connections */}
+            <Link
+              href="/connections"
+              onClick={closeSidebar}
+              className={`
+                block px-3 py-2 text-sm rounded-md transition-colors
+                ${pathname === '/connections'
+                  ? 'bg-ui-bg-subtle text-ui-fg-base font-medium'
+                  : 'text-ui-fg-subtle hover:text-ui-fg-base hover:bg-ui-bg-subtle-hover'
+                }
+              `}
+            >
+              Connections
+            </Link>
           </nav>
 
           {/* Logout */}
-          <div className="p-3 lg:p-4 border-t border-ui-border-base">
+          <div className="p-2 lg:p-3 border-t border-ui-border-base">
             <Button
               variant="secondary"
-              className="w-full"
+              className="w-full text-sm"
               onClick={handleLogout}
             >
               Sign out
@@ -98,19 +193,20 @@ export function DashboardLayout({ children }: { children: React.ReactNode }) {
       </aside>
 
       {/* Main content */}
-      <main className="lg:pl-64 min-h-screen">
+      <main className="lg:pl-72 min-h-screen">
         {/* Mobile header */}
-        <div className="sticky top-0 z-30 lg:hidden bg-ui-bg-base border-b border-ui-border-base p-4 flex items-center gap-3">
+        <div className="sticky top-0 z-30 lg:hidden bg-ui-bg-base border-b border-ui-border-base p-3 flex items-center gap-2">
           <IconButton variant="transparent" onClick={() => setSidebarOpen(true)}>
             <BarsThree />
           </IconButton>
-          <Text className="font-semibold text-ui-fg-base">GrayCup Admin</Text>
+          <Text className="text-sm font-semibold text-ui-fg-base">GrayCup Admin</Text>
         </div>
 
         <div className="p-4 lg:p-8">
           {children}
         </div>
       </main>
+      <RealtimeProvider />
     </div>
   )
 }

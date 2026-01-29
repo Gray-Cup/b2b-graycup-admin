@@ -7,7 +7,7 @@ import { useWebhooks, forwardToDiscord } from '@/lib/hooks/use-webhooks'
 
 interface ForwardButtonProps {
   table: string
-  submission: Record<string, unknown>
+  submission: object
 }
 
 export function ForwardButton({ table, submission }: ForwardButtonProps) {

@@ -60,7 +60,7 @@ export async function deleteWebhook(id: string) {
 
 export async function forwardToDiscord(webhookId: string, data: {
   table: string
-  submission: Record<string, unknown>
+  submission: object
 }) {
   const response = await fetch('/api/webhooks/forward', {
     method: 'POST',
@@ -77,7 +77,7 @@ export async function forwardToDiscord(webhookId: string, data: {
 
 export async function bulkForwardToDiscord(webhookId: string, data: {
   table: string
-  submissions: Record<string, unknown>[]
+  submissions: object[]
 }) {
   const results = await Promise.allSettled(
     data.submissions.map(submission =>

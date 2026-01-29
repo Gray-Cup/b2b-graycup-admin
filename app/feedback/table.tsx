@@ -1,11 +1,12 @@
 'use client'
 
-import { useState, useMemo } from 'react'
+import { useState, useMemo, useEffect } from 'react'
 import { PageHeader } from '@/app/components/page-header'
-import { Badge, Button, Text, Input, Select, toast } from '@medusajs/ui'
+import { Badge, Button, Text, Input, Select, Checkbox, toast } from '@medusajs/ui'
 import { format } from 'date-fns'
 import { useSubmissions, updateSubmission, deleteSubmission } from '@/lib/hooks/use-submissions'
 import { ForwardButton } from '@/app/components/forward-button'
+import { BulkForwardDropdown } from '@/app/components/bulk-forward-dropdown'
 
 interface Feedback {
   id: string
@@ -36,6 +37,8 @@ const ratingEmoji: Record<string, string> = {
 export function FeedbackTable() {
   const [filter, setFilter] = useState<'all' | 'resolved' | 'unresolved'>('unresolved')
   const [search, setSearch] = useState('')
+  const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set())
+  const [selectMode, setSelectMode] = useState(false)
 
   const resolvedParam = filter === 'all' ? null : filter === 'resolved' ? 'true' : 'false'
   const { data, isLoading, isValidating } = useSubmissions({
@@ -52,6 +55,47 @@ export function FeedbackTable() {
       )
     )
   }, [data, search])
+
+  // Clear selection when filter or search changes
+  useEffect(() => {
+    setSelectedIds(new Set())
+  }, [filter, search])
+
+  const toggleSelect = (id: string) => {
+    setSelectedIds(prev => {
+      const newSet = new Set(prev)
+      if (newSet.has(id)) {
+        newSet.delete(id)
+      } else {
+        newSet.add(id)
+      }
+      return newSet
+    })
+  }
+
+  const toggleSelectAll = () => {
+    if (selectedIds.size === filteredData.length) {
+      setSelectedIds(new Set())
+    } else {
+      setSelectedIds(new Set(filteredData.map((row) => row.id)))
+    }
+  }
+
+  const clearSelection = () => {
+    setSelectedIds(new Set())
+    setSelectMode(false)
+  }
+
+  const toggleSelectMode = () => {
+    if (selectMode) {
+      setSelectedIds(new Set())
+    }
+    setSelectMode(!selectMode)
+  }
+
+  const selectedSubmissions = useMemo(() => {
+    return filteredData.filter((row) => selectedIds.has(row.id))
+  }, [filteredData, selectedIds])
 
   const toggleResolved = async (id: string, currentValue: boolean) => {
     try {
@@ -88,7 +132,7 @@ export function FeedbackTable() {
       />
 
       <div className="mb-6 flex flex-col sm:flex-row gap-4 justify-between">
-        <div className="flex gap-3 items-center">
+        <div className="flex gap-3 items-center flex-wrap">
           <Select value={filter} onValueChange={(v) => setFilter(v as typeof filter)}>
             <Select.Trigger>
               <Select.Value placeholder="Filter" />
@@ -101,6 +145,32 @@ export function FeedbackTable() {
           </Select>
           {isValidating && !isLoading && (
             <Text className="text-xs text-ui-fg-muted">Updating...</Text>
+          )}
+
+          <Button
+            variant={selectMode ? 'primary' : 'secondary'}
+            size="small"
+            onClick={toggleSelectMode}
+          >
+            {selectMode ? `${selectedIds.size} Selected` : 'Select'}
+          </Button>
+
+          {selectMode && filteredData.length > 0 && (
+            <Button
+              variant="secondary"
+              size="small"
+              onClick={toggleSelectAll}
+            >
+              {selectedIds.size === filteredData.length ? 'Deselect All' : 'Select All'}
+            </Button>
+          )}
+
+          {selectMode && selectedIds.size > 0 && (
+            <BulkForwardDropdown
+              tableName="feedback_submissions"
+              selectedSubmissions={selectedSubmissions}
+              onSuccess={clearSelection}
+            />
           )}
         </div>
         <Input
@@ -124,13 +194,28 @@ export function FeedbackTable() {
           {filteredData.map((item) => (
             <div
               key={item.id}
-              className="bg-ui-bg-base rounded-lg border border-ui-border-base p-4 flex flex-col gap-3"
+              className={`bg-ui-bg-base rounded-lg border p-4 flex flex-col gap-3 transition-colors ${
+                selectMode && selectedIds.has(item.id)
+                  ? 'border-ui-border-interactive bg-ui-bg-subtle'
+                  : 'border-ui-border-base'
+              } ${selectMode ? 'cursor-pointer' : ''}`}
+              onClick={selectMode ? () => toggleSelect(item.id) : undefined}
             >
               {/* Header */}
               <div className="flex items-start justify-between gap-2">
-                <div className="min-w-0 flex-1">
-                  <Text className="font-medium text-ui-fg-base truncate">{item.company || 'No company'}</Text>
-                  <Text className="text-sm text-ui-fg-subtle">{item.name}</Text>
+                <div className="flex items-start gap-3 min-w-0 flex-1">
+                  {selectMode && (
+                    <Checkbox
+                      checked={selectedIds.has(item.id)}
+                      onCheckedChange={() => toggleSelect(item.id)}
+                      onClick={(e) => e.stopPropagation()}
+                      className="mt-1 shrink-0"
+                    />
+                  )}
+                  <div className="min-w-0 flex-1">
+                    <Text className="font-medium text-ui-fg-base truncate">{item.company || 'No company'}</Text>
+                    <Text className="text-sm text-ui-fg-subtle">{item.name}</Text>
+                  </div>
                 </div>
                 <Badge color={item.resolved ? 'green' : 'orange'} className="shrink-0">
                   {item.resolved ? 'Resolved' : 'Pending'}
@@ -173,7 +258,7 @@ export function FeedbackTable() {
               {/* Footer */}
               <div className="flex items-center justify-between pt-3 border-t border-ui-border-base mt-auto">
                 <Text className="text-xs text-ui-fg-muted">{formatDate(item.created_at)}</Text>
-                <div className="flex gap-2">
+                <div className="flex gap-2" onClick={(e) => e.stopPropagation()}>
                   <ForwardButton table="feedback_submissions" submission={item} />
                   <Button
                     variant="secondary"

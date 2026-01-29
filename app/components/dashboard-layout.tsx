@@ -226,7 +226,7 @@ export function DashboardLayout({ children }: { children: React.ReactNode }) {
               )}
             </div>
 
-            {/* Analyze */}
+            {/* Analyze Feedback */}
             <Link
               href="/analyze"
               onClick={closeSidebar}
@@ -238,7 +238,22 @@ export function DashboardLayout({ children }: { children: React.ReactNode }) {
                 }
               `}
             >
-              Analyze
+              Analyze Feedback
+            </Link>
+
+            {/* Backups */}
+            <Link
+              href="/backups"
+              onClick={closeSidebar}
+              className={`
+                block px-3 py-2 text-sm rounded-md transition-colors
+                ${pathname === '/backups'
+                  ? 'bg-ui-bg-subtle text-ui-fg-base font-medium'
+                  : 'text-ui-fg-subtle hover:text-ui-fg-base hover:bg-ui-bg-subtle-hover'
+                }
+              `}
+            >
+              Backups
             </Link>
 
             {/* Connections */}

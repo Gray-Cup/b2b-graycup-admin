@@ -80,7 +80,7 @@ export function AnalyzePage() {
   if (isLoading) {
     return (
       <>
-        <PageHeader title="Analyze" description="Feedback analytics and insights" />
+        <PageHeader title="Analyze Feedback" description="Feedback analytics and insights" />
         <div className="p-8 text-center">
           <Text className="text-ui-fg-subtle">Loading...</Text>
         </div>
@@ -90,7 +90,7 @@ export function AnalyzePage() {
 
   return (
     <>
-      <PageHeader title="Analyze" description="Feedback analytics and insights" />
+      <PageHeader title="Analyze Feedback" description="Feedback analytics and insights" />
 
       {/* Stats Overview */}
       <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-8">

@@ -23,6 +23,7 @@ interface ImportResult {
   table: string
   success: number
   failed: number
+  skipped: number
   errors: string[]
 }
 
@@ -31,6 +32,10 @@ interface ExportProgress {
   total: number
   currentTable: string
   status: string
+}
+
+interface ImportData {
+  [key: string]: Record<string, unknown>[]
 }
 
 const CHUNK_SIZE = 1000 // Process 1000 records at a time
@@ -74,6 +79,31 @@ export function BackupsPage() {
       }
       return formatted
     })
+  }, [])
+
+  // Generate raw CSV (without formatting, for importable)
+  const generateRawCSV = useCallback((data: Record<string, unknown>[]) => {
+    if (data.length === 0) return ''
+
+    const headers = Object.keys(data[0])
+    const csvParts: string[] = [headers.join(',')]
+
+    for (let i = 0; i < data.length; i += CHUNK_SIZE) {
+      const chunk = data.slice(i, i + CHUNK_SIZE)
+      const chunkRows = chunk.map((row) =>
+        headers
+          .map((h) => {
+            const value = row[h]
+            if (value === null || value === undefined) return '""'
+            if (typeof value === 'object') return `"${JSON.stringify(value).replace(/"/g, '""')}"`
+            return `"${String(value).replace(/"/g, '""')}"`
+          })
+          .join(',')
+      )
+      csvParts.push(...chunkRows)
+    }
+
+    return csvParts.join('\n')
   }, [])
 
   // Generate Excel in chunks for large datasets
@@ -183,6 +213,13 @@ export function BackupsPage() {
 
       setExportProgress(prev => ({ ...prev!, total: tablesToExport.length }))
 
+      // Collect all data for import.json
+      const allData: ImportData = {}
+
+      // Create importable directories
+      const importableJson = zip.folder('importable/json')
+      const importableCsv = zip.folder('importable/csv')
+
       for (let i = 0; i < tablesToExport.length; i++) {
         const table = tablesToExport[i]
         setExportProgress({
@@ -198,6 +235,9 @@ export function BackupsPage() {
 
         if (data.length === 0) continue
 
+        // Store raw data for import.json
+        allData[table.key] = data
+
         const folder = zip.folder(table.key)
         if (!folder) continue
 
@@ -208,10 +248,17 @@ export function BackupsPage() {
         const jsonContent = JSON.stringify(data, null, 2)
         folder.file(`${table.key}.json`, jsonContent)
 
+        // Add to importable/json (raw data)
+        importableJson?.file(`${table.key}.json`, jsonContent)
+
         // CSV
         setExportProgress(prev => ({ ...prev!, status: `Creating CSV for ${table.name}...` }))
         const csv = generateCSV(data)
         if (csv) folder.file(`${table.key}.csv`, csv)
+
+        // Add to importable/csv (raw data)
+        const rawCsv = generateRawCSV(data)
+        if (rawCsv) importableCsv?.file(`${table.key}.csv`, rawCsv)
 
         // Excel
         setExportProgress(prev => ({ ...prev!, status: `Creating Excel for ${table.name}...` }))
@@ -230,6 +277,10 @@ export function BackupsPage() {
         const txt = generateTXT(data, table.name)
         if (txt) folder.file(`${table.key}.txt`, txt)
       }
+
+      // Create import.json at root level
+      setExportProgress(prev => ({ ...prev!, status: 'Creating import.json...' }))
+      zip.file('import.json', JSON.stringify(allData, null, 2))
 
       setExportProgress(prev => ({ ...prev!, status: 'Compressing ZIP file...' }))
 
@@ -322,10 +373,10 @@ export function BackupsPage() {
   }
 
   // Parse JSON in chunks to handle large files
-  const parseJSONFile = async (file: File): Promise<Record<string, unknown>[]> => {
+  const parseJSONFile = async (file: File): Promise<Record<string, unknown>[] | ImportData> => {
     const content = await file.text()
     const data = JSON.parse(content)
-    return Array.isArray(data) ? data : [data]
+    return data
   }
 
   // Parse CSV file with streaming for large files
@@ -334,14 +385,15 @@ export function BackupsPage() {
     return parseCSV(content)
   }
 
-  // Import data in batches
+  // Import data in batches with duplicate checking
   const importInBatches = async (
     table: string,
     data: Record<string, unknown>[],
     onProgress: (progress: string) => void
-  ): Promise<{ success: number; failed: number; errors: string[] }> => {
+  ): Promise<{ success: number; failed: number; skipped: number; errors: string[] }> => {
     let totalSuccess = 0
     let totalFailed = 0
+    let totalSkipped = 0
     const allErrors: string[] = []
 
     const totalBatches = Math.ceil(data.length / IMPORT_BATCH_SIZE)
@@ -355,12 +407,13 @@ export function BackupsPage() {
         const response = await fetch('/api/backups/import', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ table, data: batch })
+          body: JSON.stringify({ table, data: batch, skipDuplicates: true })
         })
 
         const result = await response.json()
         totalSuccess += result.success || 0
         totalFailed += result.failed || 0
+        totalSkipped += result.skipped || 0
         if (result.errors) {
           allErrors.push(...result.errors.slice(0, 5))
         }
@@ -375,7 +428,7 @@ export function BackupsPage() {
       }
     }
 
-    return { success: totalSuccess, failed: totalFailed, errors: allErrors.slice(0, 10) }
+    return { success: totalSuccess, failed: totalFailed, skipped: totalSkipped, errors: allErrors.slice(0, 10) }
   }
 
   const handleImport = async (event: React.ChangeEvent<HTMLInputElement>) => {
@@ -401,65 +454,109 @@ export function BackupsPage() {
             table: file.name,
             success: 0,
             failed: 0,
+            skipped: 0,
             errors: ['Only JSON and CSV files are supported']
           })
           continue
         }
 
-        let data: Record<string, unknown>[]
-
         try {
           setImportProgress(`Parsing ${file.name} (${(file.size / 1024 / 1024).toFixed(2)} MB)...`)
 
+          // Check if this is the import.json file (contains all tables)
+          if (fileName === 'import.json') {
+            const allData = await parseJSONFile(file) as ImportData
+
+            // Check if it's the combined import format
+            if (typeof allData === 'object' && !Array.isArray(allData)) {
+              const tableKeys = Object.keys(allData)
+              const validTableKeys = tableKeys.filter(key =>
+                tables.some(t => t.key === key)
+              )
+
+              if (validTableKeys.length > 0) {
+                setImportProgress(`Found ${validTableKeys.length} tables in import.json`)
+
+                for (const tableKey of validTableKeys) {
+                  const tableData = allData[tableKey]
+                  if (!Array.isArray(tableData) || tableData.length === 0) continue
+
+                  setImportProgress(`Importing ${tableData.length} records to ${tableKey}...`)
+
+                  const result = await importInBatches(
+                    tableKey,
+                    tableData,
+                    (progress) => setImportProgress(progress)
+                  )
+
+                  results.push({
+                    table: `${tableKey} (from import.json)`,
+                    success: result.success,
+                    failed: result.failed,
+                    skipped: result.skipped,
+                    errors: result.errors
+                  })
+                }
+                continue
+              }
+            }
+          }
+
+          // Regular file import
+          let data: Record<string, unknown>[]
+
           if (isJSON) {
-            data = await parseJSONFile(file)
+            const parsed = await parseJSONFile(file)
+            data = Array.isArray(parsed) ? parsed : [parsed as Record<string, unknown>]
           } else {
             data = await parseCSVFile(file)
           }
+
+          // Determine table from filename
+          let detectedTable = ''
+          for (const table of tables) {
+            if (fileName.includes(table.key)) {
+              detectedTable = table.key
+              break
+            }
+          }
+
+          if (!detectedTable) {
+            results.push({
+              table: file.name,
+              success: 0,
+              failed: data.length,
+              skipped: 0,
+              errors: ['Could not determine table from filename. Filename should contain table name (e.g., contact_submissions.json) or use import.json for all tables']
+            })
+            continue
+          }
+
+          setImportProgress(`Importing ${data.length} records to ${detectedTable}...`)
+
+          // Import in batches for large datasets
+          const result = await importInBatches(
+            detectedTable,
+            data,
+            (progress) => setImportProgress(progress)
+          )
+
+          results.push({
+            table: `${detectedTable} (${file.name})`,
+            success: result.success,
+            failed: result.failed,
+            skipped: result.skipped,
+            errors: result.errors
+          })
         } catch (parseError) {
           results.push({
             table: file.name,
             success: 0,
             failed: 0,
+            skipped: 0,
             errors: [`Failed to parse file: ${parseError instanceof Error ? parseError.message : 'Unknown error'}`]
           })
-          continue
         }
-
-        // Determine table from filename
-        let detectedTable = ''
-        for (const table of tables) {
-          if (fileName.includes(table.key)) {
-            detectedTable = table.key
-            break
-          }
-        }
-
-        if (!detectedTable) {
-          results.push({
-            table: file.name,
-            success: 0,
-            failed: data.length,
-            errors: ['Could not determine table from filename. Filename should contain table name (e.g., contact_submissions.json)']
-          })
-          continue
-        }
-
-        setImportProgress(`Importing ${data.length} records to ${detectedTable}...`)
-
-        // Import in batches for large datasets
-        const result = await importInBatches(
-          detectedTable,
-          data,
-          (progress) => setImportProgress(progress)
-        )
-
-        results.push({
-          table: `${detectedTable} (${file.name})`,
-          success: result.success,
-          failed: result.failed,
-          errors: result.errors
-        })
       }
     } catch (error) {
       console.error('Import error:', error)
@@ -467,6 +564,7 @@ export function BackupsPage() {
         table: 'Import',
         success: 0,
         failed: 0,
+        skipped: 0,
         errors: ['An unexpected error occurred during import']
       })
     } finally {
@@ -518,14 +616,17 @@ export function BackupsPage() {
             </div>
 
             <div className="bg-ui-bg-subtle rounded-md p-3">
-              <Text className="text-xs text-ui-fg-muted mb-2">Included Formats</Text>
-              <div className="flex flex-wrap gap-2">
+              <Text className="text-xs text-ui-fg-muted mb-2">Included in Export</Text>
+              <div className="flex flex-wrap gap-2 mb-2">
                 {['CSV', 'JSON', 'Excel', 'PDF', 'TXT'].map((fmt) => (
                   <Badge key={fmt} color="grey">{fmt}</Badge>
                 ))}
               </div>
-              <Text className="text-xs text-ui-fg-muted mt-2">
-                PDF is skipped for tables with more than 10,000 records
+              <Text className="text-xs text-ui-fg-muted">
+                + <strong>import.json</strong> (for easy restore)
+              </Text>
+              <Text className="text-xs text-ui-fg-muted">
+                + <strong>importable/</strong> folder with raw JSON & CSV
               </Text>
             </div>
 
@@ -575,10 +676,13 @@ export function BackupsPage() {
                 <Badge color="green">CSV</Badge>
               </div>
               <Text className="text-xs text-ui-fg-muted mt-2">
-                Filename must contain the table name (e.g., contact_submissions.json)
+                <strong>Easiest:</strong> Use <code className="bg-ui-bg-base px-1 rounded">import.json</code> from backup
               </Text>
               <Text className="text-xs text-ui-fg-muted mt-1">
-                Large files are processed in batches of {IMPORT_BATCH_SIZE} records
+                Or files from <code className="bg-ui-bg-base px-1 rounded">importable/</code> folder
+              </Text>
+              <Text className="text-xs text-ui-fg-subtle mt-2">
+                Duplicates are automatically skipped (based on email)
               </Text>
             </div>
 
@@ -630,7 +734,9 @@ export function BackupsPage() {
                       <Text className="text-sm font-medium">{result.table}</Text>
                     </div>
                     <Text className="text-xs text-ui-fg-muted">
-                      {result.success.toLocaleString()} imported, {result.failed.toLocaleString()} failed
+                      {result.success.toLocaleString()} imported
+                      {result.skipped > 0 && `, ${result.skipped.toLocaleString()} skipped (duplicates)`}
+                      {result.failed > 0 && `, ${result.failed.toLocaleString()} failed`}
                     </Text>
                     {result.errors.length > 0 && (
                       <div className="mt-2">

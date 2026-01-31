@@ -26,7 +26,7 @@ const ratingColors: Record<string, 'green' | 'blue' | 'orange' | 'red' | 'grey'>
 }
 
 export function AnalyzePage() {
-  const [selectedRating, setSelectedRating] = useState<string>('Average')
+  const [selectedRating, setSelectedRating] = useState<string>('All')
   const { data, isLoading } = useSubmissions({
     table: 'feedback_submissions',
     resolved: null, // Get all feedback
@@ -55,6 +55,7 @@ export function AnalyzePage() {
 
   // Filter feedback by selected rating
   const filteredFeedback = useMemo(() => {
+    if (selectedRating === 'All') return feedbackData
     return feedbackData.filter((f) => f.rating === selectedRating)
   }, [feedbackData, selectedRating])
 
@@ -93,7 +94,24 @@ export function AnalyzePage() {
       <PageHeader title="Analyze Feedback" description="Feedback analytics and insights" />
 
       {/* Stats Overview */}
-      <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-8">
+      <div className="grid grid-cols-2 md:grid-cols-5 gap-4 mb-8">
+        {/* All option */}
+        <button
+          onClick={() => setSelectedRating('All')}
+          className={`
+            p-4 rounded-lg border transition-all text-left
+            ${selectedRating === 'All'
+              ? 'border-ui-border-interactive bg-ui-bg-interactive-subtle'
+              : 'border-ui-border-base bg-ui-bg-base hover:border-ui-border-strong'
+            }
+          `}
+        >
+          <div className="flex items-center justify-between mb-2">
+            <Badge color="purple">All</Badge>
+            <Text className="text-2xl font-bold text-ui-fg-base">{stats.total}</Text>
+          </div>
+          <Text className="text-sm text-ui-fg-subtle">100%</Text>
+        </button>
         {Object.entries(stats.byRating).map(([rating, count]) => {
           const percentage = stats.total > 0 ? ((count / stats.total) * 100).toFixed(1) : '0'
           return (
@@ -126,6 +144,7 @@ export function AnalyzePage() {
               <Select.Value placeholder="Select rating" />
             </Select.Trigger>
             <Select.Content>
+              <Select.Item value="All">All</Select.Item>
               <Select.Item value="Excellent">Excellent</Select.Item>
               <Select.Item value="Good">Good</Select.Item>
               <Select.Item value="Average">Average</Select.Item>
@@ -147,7 +166,9 @@ export function AnalyzePage() {
       {/* Feedback List */}
       {filteredFeedback.length === 0 ? (
         <div className="p-8 text-center bg-ui-bg-base rounded-lg border border-ui-border-base">
-          <Text className="text-ui-fg-subtle">No feedback with "{selectedRating}" rating</Text>
+          <Text className="text-ui-fg-subtle">
+            {selectedRating === 'All' ? 'No feedback yet' : `No feedback with "${selectedRating}" rating`}
+          </Text>
         </div>
       ) : (
         <div className="space-y-4">

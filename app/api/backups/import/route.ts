@@ -15,7 +15,7 @@ const BATCH_INSERT_SIZE = 50 // Insert 50 records at a time to Supabase
 export async function POST(request: NextRequest) {
   try {
     const body = await request.json()
-    const { table, data } = body
+    const { table, data, skipDuplicates = true } = body
 
     if (!table || !validTables.includes(table)) {
       return NextResponse.json({ error: 'Invalid table' }, { status: 400 })
@@ -28,7 +28,24 @@ export async function POST(request: NextRequest) {
     const supabase = getSupabase()
     let successCount = 0
     let failedCount = 0
+    let skippedCount = 0
     const errors: string[] = []
+
+    // Get existing emails to check for duplicates
+    let existingEmails: Set<string> = new Set()
+    if (skipDuplicates) {
+      const { data: existingData } = await supabase
+        .from(table)
+        .select('email')
+
+      if (existingData) {
+        existingEmails = new Set(
+          existingData
+            .map((item: { email?: string }) => item.email?.toLowerCase())
+            .filter((email): email is string => Boolean(email))
+        )
+      }
+    }
 
     // Process and clean all items first
     const cleanedItems: Record<string, unknown>[] = []
@@ -70,6 +87,17 @@ export async function POST(request: NextRequest) {
         }
         if (!('vaulted' in processedItem)) {
           processedItem.vaulted = false
+        }
+
+        // Check for duplicates based on email
+        if (skipDuplicates && processedItem.email) {
+          const email = String(processedItem.email).toLowerCase()
+          if (existingEmails.has(email)) {
+            skippedCount++
+            continue
+          }
+          // Add to existing emails to prevent duplicates within the same import
+          existingEmails.add(email)
         }
 
         cleanedItems.push(processedItem)
@@ -122,12 +150,13 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({
       success: successCount,
       failed: failedCount,
+      skipped: skippedCount,
       errors
     })
   } catch (error) {
     console.error('Import error:', error)
     return NextResponse.json(
-      { error: 'Failed to import data', success: 0, failed: 0, errors: ['Server error'] },
+      { error: 'Failed to import data', success: 0, failed: 0, skipped: 0, errors: ['Server error'] },
       { status: 500 }
     )
   }

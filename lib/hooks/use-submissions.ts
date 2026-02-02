@@ -78,7 +78,7 @@ export function useVaultCounts() {
 export async function revalidateAllCaches(table?: string) {
   const tables = table
     ? [table]
-    : ['contact_submissions', 'quote_requests', 'sample_requests', 'feedback_submissions', 'product_requests', 'call_requests']
+    : ['contact_submissions', 'quote_requests', 'sample_requests', 'feedback_submissions', 'product_requests', 'call_requests', 'bulk_chai_price_quotes']
 
   const promises: Promise<unknown>[] = []
 

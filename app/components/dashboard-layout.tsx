@@ -171,6 +171,21 @@ export function DashboardLayout({ children }: { children: React.ReactNode }) {
               )}
             </div>
 
+            {/* Bulk Chai */}
+            <Link
+              href="/bulk-chai"
+              onClick={closeSidebar}
+              className={`
+                block px-3 py-2 text-sm rounded-md transition-colors
+                ${pathname === '/bulk-chai'
+                  ? 'bg-ui-bg-subtle text-ui-fg-base font-medium'
+                  : 'text-ui-fg-subtle hover:text-ui-fg-base hover:bg-ui-bg-subtle-hover'
+                }
+              `}
+            >
+              Bulk Chai
+            </Link>
+
             {/* Vault Collapsible */}
             <div>
               <button

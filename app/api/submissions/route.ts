@@ -8,6 +8,7 @@ const validTables = [
   'feedback_submissions',
   'product_requests',
   'call_requests',
+  'bulk_chai_price_quotes',
 ]
 
 export async function GET(request: NextRequest) {

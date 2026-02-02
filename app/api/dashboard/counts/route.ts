@@ -8,6 +8,7 @@ const tables = [
   { table: 'feedback_submissions', label: 'Feedback', href: '/feedback' },
   { table: 'product_requests', label: 'Product Requests', href: '/product-requests' },
   { table: 'call_requests', label: 'Call Requests', href: '/call-requests' },
+  { table: 'bulk_chai_price_quotes', label: 'Bulk Chai', href: '/bulk-chai' },
 ]
 
 export async function GET() {

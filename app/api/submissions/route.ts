@@ -9,6 +9,7 @@ const validTables = [
   'product_requests',
   'call_requests',
   'bulk_chai_price_quotes',
+  'tech_solutions_requests',
 ]
 
 export async function GET(request: NextRequest) {

@@ -186,6 +186,21 @@ export function DashboardLayout({ children }: { children: React.ReactNode }) {
               Bulk Chai
             </Link>
 
+            {/* Tech Solutions */}
+            <Link
+              href="/tech-solutions"
+              onClick={closeSidebar}
+              className={`
+                block px-3 py-2 text-sm rounded-md transition-colors
+                ${pathname === '/tech-solutions'
+                  ? 'bg-ui-bg-subtle text-ui-fg-base font-medium'
+                  : 'text-ui-fg-subtle hover:text-ui-fg-base hover:bg-ui-bg-subtle-hover'
+                }
+              `}
+            >
+              Tech Solutions
+            </Link>
+
             {/* Vault Collapsible */}
             <div>
               <button

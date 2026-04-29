@@ -4,6 +4,7 @@ import { supabase } from '@/lib/supabase'
 const tables = [
   { table: 'contact_submissions', label: 'Contact Submissions', href: '/contact-submissions' },
   { table: 'quote_requests', label: 'Quote Requests', href: '/quote-requests' },
+  { table: 'price_quotes', label: 'Price Quotes', href: '/price-quotes' },
   { table: 'sample_requests', label: 'Sample Requests', href: '/sample-requests' },
   { table: 'feedback_submissions', label: 'Feedback', href: '/feedback' },
   { table: 'product_requests', label: 'Product Requests', href: '/product-requests' },

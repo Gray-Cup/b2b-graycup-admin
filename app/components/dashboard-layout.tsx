@@ -11,6 +11,7 @@ import { useDashboardCounts, useVaultCounts } from '@/lib/hooks/use-submissions'
 const submissionsNavigation = [
   { name: 'Contact Submissions', href: '/contact-submissions', table: 'contact_submissions' },
   { name: 'Quote Requests', href: '/quote-requests', table: 'quote_requests' },
+  { name: 'Price Quotes', href: '/price-quotes', table: 'price_quotes' },
   { name: 'Sample Requests', href: '/sample-requests', table: 'sample_requests' },
   { name: 'Feedback', href: '/feedback', table: 'feedback_submissions' },
   { name: 'Product Requests', href: '/product-requests', table: 'product_requests' },
@@ -20,6 +21,7 @@ const submissionsNavigation = [
 const vaultNavigation = [
   { name: 'Call Requests', href: '/vault/call-requests', table: 'call_requests' },
   { name: 'Product Requests', href: '/vault/product-requests', table: 'product_requests' },
+  { name: 'Price Quotes', href: '/vault/price-quotes', table: 'price_quotes' },
   { name: 'Feedback', href: '/vault/feedback', table: 'feedback_submissions' },
   { name: 'Sample Requests', href: '/vault/sample-requests', table: 'sample_requests' },
   { name: 'Quote Requests', href: '/vault/quote-requests', table: 'quote_requests' },

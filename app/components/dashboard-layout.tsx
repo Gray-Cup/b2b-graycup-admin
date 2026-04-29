@@ -11,7 +11,6 @@ import { useDashboardCounts, useVaultCounts } from '@/lib/hooks/use-submissions'
 const submissionsNavigation = [
   { name: 'Contact Submissions', href: '/contact-submissions', table: 'contact_submissions' },
   { name: 'Quote Requests', href: '/quote-requests', table: 'quote_requests' },
-  { name: 'Price Quotes', href: '/price-quotes', table: 'price_quotes' },
   { name: 'Sample Requests', href: '/sample-requests', table: 'sample_requests' },
   { name: 'Feedback', href: '/feedback', table: 'feedback_submissions' },
   { name: 'Product Requests', href: '/product-requests', table: 'product_requests' },
@@ -21,7 +20,6 @@ const submissionsNavigation = [
 const vaultNavigation = [
   { name: 'Call Requests', href: '/vault/call-requests', table: 'call_requests' },
   { name: 'Product Requests', href: '/vault/product-requests', table: 'product_requests' },
-  { name: 'Price Quotes', href: '/vault/price-quotes', table: 'price_quotes' },
   { name: 'Feedback', href: '/vault/feedback', table: 'feedback_submissions' },
   { name: 'Sample Requests', href: '/vault/sample-requests', table: 'sample_requests' },
   { name: 'Quote Requests', href: '/vault/quote-requests', table: 'quote_requests' },
@@ -172,6 +170,21 @@ export function DashboardLayout({ children }: { children: React.ReactNode }) {
                 </div>
               )}
             </div>
+
+            {/* Bulk Green Coffee */}
+            <Link
+              href="/bulk-green-coffee"
+              onClick={closeSidebar}
+              className={`
+                block px-3 py-2 text-sm rounded-md transition-colors
+                ${pathname === '/bulk-green-coffee'
+                  ? 'bg-ui-bg-subtle text-ui-fg-base font-medium'
+                  : 'text-ui-fg-subtle hover:text-ui-fg-base hover:bg-ui-bg-subtle-hover'
+                }
+              `}
+            >
+              Bulk Green Coffee
+            </Link>
 
             {/* Bulk Chai */}
             <Link

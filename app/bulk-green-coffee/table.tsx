@@ -2,45 +2,46 @@
 
 import { useState, useMemo, useEffect } from 'react'
 import { PageHeader } from '@/app/components/page-header'
-import { Badge, Button, Text, Input, Checkbox, toast } from '@medusajs/ui'
+import { Badge, Button, Text, Input, Select, Checkbox, toast } from '@medusajs/ui'
 import { format } from 'date-fns'
-import { useSubmissions, vaultSubmission, deleteSubmission } from '@/lib/hooks/use-submissions'
+import { useSubmissions, updateSubmission, deleteSubmission, vaultSubmission } from '@/lib/hooks/use-submissions'
+import { CheckCircleSolid } from '@medusajs/icons'
 import { ForwardButton } from '@/app/components/forward-button'
 import { BulkForwardDropdown } from '@/app/components/bulk-forward-dropdown'
 import { DownloadButton } from '@/app/components/download-button'
 
-interface PriceQuote {
+interface BgcQuoteRequest {
   id: string
   company_name: string
   contact_name: string
   email: string
   phone: string
-  category: string
+  product_id: string
   product_name: string
-  origin: string
   grade: string
-  quantity: string
-  target_price: string
-  notes: string
+  quantity: number
+  message: string
   resolved: boolean
   vaulted: boolean
   created_at: string
 }
 
-export function VaultPriceQuotesTable() {
+export function BulkGreenCoffeeTable() {
+  const [filter, setFilter] = useState<'all' | 'resolved' | 'unresolved'>('unresolved')
   const [search, setSearch] = useState('')
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set())
   const [selectMode, setSelectMode] = useState(false)
 
+  const resolvedParam = filter === 'all' ? null : filter === 'resolved' ? 'true' : 'false'
   const { data, isLoading, isValidating } = useSubmissions({
-    table: 'price_quotes',
-    vaulted: 'true',
+    table: 'bgc_quote_requests',
+    resolved: resolvedParam,
   })
 
   const filteredData = useMemo(() => {
-    if (!search) return data as PriceQuote[]
+    if (!search) return data as BgcQuoteRequest[]
     const searchLower = search.toLowerCase()
-    return (data as PriceQuote[]).filter((row) =>
+    return (data as BgcQuoteRequest[]).filter((row) =>
       Object.values(row).some((value) =>
         String(value).toLowerCase().includes(searchLower)
       )
@@ -49,7 +50,7 @@ export function VaultPriceQuotesTable() {
 
   useEffect(() => {
     setSelectedIds(new Set())
-  }, [search])
+  }, [filter, search])
 
   const toggleSelect = (id: string) => {
     setSelectedIds(prev => {
@@ -79,10 +80,19 @@ export function VaultPriceQuotesTable() {
     return filteredData.filter((row) => selectedIds.has(row.id))
   }, [filteredData, selectedIds])
 
-  const handleUnvault = async (id: string) => {
+  const toggleResolved = async (id: string, currentValue: boolean) => {
     try {
-      await vaultSubmission('price_quotes', id, false, null)
-      toast.success('Removed from vault')
+      await updateSubmission('bgc_quote_requests', id, !currentValue, resolvedParam)
+      toast.success(currentValue ? 'Marked as unresolved' : 'Marked as resolved')
+    } catch {
+      toast.error('Failed to update')
+    }
+  }
+
+  const toggleVaulted = async (id: string, currentValue: boolean) => {
+    try {
+      await vaultSubmission('bgc_quote_requests', id, !currentValue, resolvedParam)
+      toast.success(currentValue ? 'Removed from vault' : 'Added to vault')
     } catch {
       toast.error('Failed to update')
     }
@@ -91,7 +101,7 @@ export function VaultPriceQuotesTable() {
   const handleDelete = async (id: string) => {
     if (!confirm('Are you sure you want to delete this item?')) return
     try {
-      await deleteSubmission('price_quotes', id, null)
+      await deleteSubmission('bgc_quote_requests', id, resolvedParam)
       toast.success('Deleted successfully')
     } catch {
       toast.error('Failed to delete')
@@ -109,16 +119,27 @@ export function VaultPriceQuotesTable() {
   return (
     <>
       <PageHeader
-        title="Vault — Price Quotes"
-        description="Archived price quote requests"
-        action={<DownloadButton tableName="price_quotes" title="Vault Price Quotes" isVault />}
+        title="Bulk Green Coffee"
+        description="Quote requests from product pages on bulkgreencoffee.com"
+        action={<DownloadButton tableName="bgc_quote_requests" title="BGC Quote Requests" />}
       />
 
       <div className="mb-6 flex flex-col sm:flex-row gap-4 justify-between">
         <div className="flex gap-3 items-center flex-wrap">
+          <Select value={filter} onValueChange={(v) => setFilter(v as typeof filter)}>
+            <Select.Trigger>
+              <Select.Value placeholder="Filter" />
+            </Select.Trigger>
+            <Select.Content>
+              <Select.Item value="unresolved">Unresolved</Select.Item>
+              <Select.Item value="resolved">Resolved</Select.Item>
+              <Select.Item value="all">All</Select.Item>
+            </Select.Content>
+          </Select>
           {isValidating && !isLoading && (
             <Text className="text-xs text-ui-fg-muted">Updating...</Text>
           )}
+
           <Button
             variant={selectMode ? 'primary' : 'secondary'}
             size="small"
@@ -126,14 +147,16 @@ export function VaultPriceQuotesTable() {
           >
             {selectMode ? `${selectedIds.size} Selected` : 'Select'}
           </Button>
+
           {selectMode && filteredData.length > 0 && (
             <Button variant="secondary" size="small" onClick={toggleSelectAll}>
               {selectedIds.size === filteredData.length ? 'Deselect All' : 'Select All'}
             </Button>
           )}
+
           {selectMode && selectedIds.size > 0 && (
             <BulkForwardDropdown
-              tableName="price_quotes"
+              tableName="bgc_quote_requests"
               selectedSubmissions={selectedSubmissions}
               onSuccess={clearSelection}
             />
@@ -153,7 +176,7 @@ export function VaultPriceQuotesTable() {
         </div>
       ) : filteredData.length === 0 ? (
         <div className="p-8 text-center bg-ui-bg-base rounded-lg border border-ui-border-base">
-          <Text className="text-ui-fg-subtle">No vaulted price quotes found</Text>
+          <Text className="text-ui-fg-subtle">No quote requests found</Text>
         </div>
       ) : (
         <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4">
@@ -167,6 +190,7 @@ export function VaultPriceQuotesTable() {
               } ${selectMode ? 'cursor-pointer' : ''}`}
               onClick={selectMode ? () => toggleSelect(item.id) : undefined}
             >
+              {/* Header */}
               <div className="flex items-start justify-between gap-2">
                 <div className="flex items-start gap-3 min-w-0 flex-1">
                   {selectMode && (
@@ -187,46 +211,69 @@ export function VaultPriceQuotesTable() {
                 </Badge>
               </div>
 
+              {/* Product Info */}
               <div className="bg-ui-bg-subtle rounded-md p-3 space-y-2">
-                <div className="flex justify-between items-center">
-                  <Text className="text-xs text-ui-fg-muted uppercase tracking-wide">Product</Text>
-                  {item.category && <Badge color="blue" className="text-xs">{item.category}</Badge>}
-                </div>
-                <Text className="font-medium text-ui-fg-base">{item.product_name || '-'}</Text>
-                <div className="grid grid-cols-2 gap-x-4 text-sm">
-                  {item.origin && (
-                    <div className="flex flex-col">
-                      <Text className="text-ui-fg-muted text-xs">Origin</Text>
-                      <Text className="text-ui-fg-base">{item.origin}</Text>
-                    </div>
-                  )}
-                  {item.grade && (
-                    <div className="flex flex-col">
-                      <Text className="text-ui-fg-muted text-xs">Grade</Text>
-                      <Text className="text-ui-fg-base">{item.grade}</Text>
-                    </div>
-                  )}
+                <Text className="text-xs text-ui-fg-muted uppercase tracking-wide">Product</Text>
+                <Text className="font-medium text-ui-fg-base">{item.product_name || item.product_id || '-'}</Text>
+                <div className="flex justify-between text-sm">
                   <div className="flex flex-col">
-                    <Text className="text-ui-fg-muted text-xs">Quantity</Text>
-                    <Text className="text-ui-fg-base font-medium">{item.quantity || '-'}</Text>
+                    <Text className="text-ui-fg-muted text-xs">Grade</Text>
+                    <Text className="text-ui-fg-base">{item.grade || '-'}</Text>
                   </div>
-                  {item.target_price && (
-                    <div className="flex flex-col">
-                      <Text className="text-ui-fg-muted text-xs">Target Price</Text>
-                      <Text className="text-ui-fg-base font-medium">{item.target_price}</Text>
-                    </div>
-                  )}
+                  <div className="flex flex-col items-end">
+                    <Text className="text-ui-fg-muted text-xs">Quantity</Text>
+                    <Text className="text-ui-fg-base font-medium">{item.quantity ?? '-'}</Text>
+                  </div>
                 </div>
               </div>
 
+              {/* Message */}
+              {item.message && (
+                <div>
+                  <Text className="text-xs text-ui-fg-muted uppercase tracking-wide mb-1">Message</Text>
+                  <Text className="text-sm text-ui-fg-subtle line-clamp-2">{item.message}</Text>
+                </div>
+              )}
+
+              {/* Contact */}
+              <div className="text-sm space-y-1">
+                <div className="flex gap-2">
+                  <Text className="text-ui-fg-muted shrink-0">Email:</Text>
+                  <Text className="text-ui-fg-base truncate">{item.email || '-'}</Text>
+                </div>
+                {item.phone && (
+                  <div className="flex gap-2">
+                    <Text className="text-ui-fg-muted shrink-0">Phone:</Text>
+                    <Text className="text-ui-fg-base">{item.phone}</Text>
+                  </div>
+                )}
+              </div>
+
+              {/* Footer */}
               <div className="flex items-center justify-between pt-3 border-t border-ui-border-base mt-auto">
                 <Text className="text-xs text-ui-fg-muted">{formatDate(item.created_at)}</Text>
                 <div className="flex gap-2" onClick={(e) => e.stopPropagation()}>
-                  <ForwardButton table="price_quotes" submission={item} />
-                  <Button variant="secondary" size="small" onClick={() => handleUnvault(item.id)}>
-                    Unvault
+                  <ForwardButton table="bgc_quote_requests" submission={item} />
+                  <Button
+                    variant={item.vaulted ? 'primary' : 'secondary'}
+                    size="small"
+                    onClick={() => toggleVaulted(item.id, item.vaulted)}
+                    className={item.vaulted ? 'bg-purple-600 hover:bg-purple-700' : ''}
+                  >
+                    {item.vaulted ? <CheckCircleSolid className="w-4 h-4" /> : 'Vault'}
                   </Button>
-                  <Button variant="danger" size="small" onClick={() => handleDelete(item.id)}>
+                  <Button
+                    variant="secondary"
+                    size="small"
+                    onClick={() => toggleResolved(item.id, item.resolved)}
+                  >
+                    {item.resolved ? 'Unresolve' : 'Resolve'}
+                  </Button>
+                  <Button
+                    variant="danger"
+                    size="small"
+                    onClick={() => handleDelete(item.id)}
+                  >
                     Delete
                   </Button>
                 </div>
